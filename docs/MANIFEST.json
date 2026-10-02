@@ -1,0 +1,32 @@
+{
+  "name": "GraceEdit Project Documentation",
+  "version": "2.0",
+  "date": "2026-10-01",
+  "description": "Product, UX, technical, AI and future Creative Studio documentation for GraceEdit.",
+  "documents": [
+    "00_README.md",
+    "01_PRODUCT_BRIEF.md",
+    "02_PRD.md",
+    "03_UX_SPEC.md",
+    "04_INFORMATION_ARCHITECTURE.md",
+    "05_USER_FLOWS.md",
+    "06_SCREEN_INVENTORY.md",
+    "07_UI_DESIGN_SYSTEM.md",
+    "08_TECHNICAL_ARCHITECTURE.md",
+    "09_MEDIA_THUMBNAILS_EXPORT.md",
+    "10_JEV_AI_SPEC.md",
+    "11_ROADMAP.md",
+    "12_OPEN_SOURCE_LEGAL.md",
+    "13_TEST_SPEC.md",
+    "14_IMPLEMENTATION_PLAN.md",
+    "15_PRODUCT_DECISIONS.md",
+    "16_RESEARCH_SOURCES.md",
+    "17_CREATIVE_STUDIO.md",
+    "18_AI_CREATIVE_ROLES.md",
+    "19_GENERATIVE_MEDIA_PIPELINE.md",
+    "20_GRAPHIC_DESIGN_SYSTEM.md",
+    "21_BRAND_KIT_AND_ASSET_LIBRARY.md",
+    "22_CREATIVE_PROJECT_MODEL.md",
+    "MANIFEST.json"
+  ]
+}
