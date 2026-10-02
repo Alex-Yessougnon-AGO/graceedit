@@ -83,6 +83,9 @@ class VideoClip {
     this.speed = 1.0,
     this.volume = 1.0,
     this.rotation = 0,
+    this.brightness = 0.0,
+    this.contrast = 1.0,
+    this.saturation = 1.0,
   });
   final String id;
   final String assetId;
@@ -91,20 +94,32 @@ class VideoClip {
   final double speed;
   final double volume;
   final int rotation;
+  /// -1.0 (dark) .. 1.0 (bright), 0 = neutral. Preview + export.
+  final double brightness;
+  final double contrast;
+  final double saturation;
 
   int get durationMs => ((endMs - startMs) / speed).round();
 
-  VideoClip copyWith({int? startMs, int? endMs, double? speed, double? volume, int? rotation}) =>
+  VideoClip copyWith({
+    int? startMs, int? endMs,
+    double? speed, double? volume, int? rotation,
+    double? brightness, double? contrast, double? saturation,
+  }) =>
       VideoClip(
         id: id, assetId: assetId,
         startMs: startMs ?? this.startMs, endMs: endMs ?? this.endMs,
         speed: speed ?? this.speed, volume: volume ?? this.volume,
         rotation: rotation ?? this.rotation,
+        brightness: brightness ?? this.brightness,
+        contrast: contrast ?? this.contrast,
+        saturation: saturation ?? this.saturation,
       );
 
   Map<String, dynamic> toJson() => {
         'id': id, 'assetId': assetId, 'startMs': startMs, 'endMs': endMs,
         'speed': speed, 'volume': volume, 'rotation': rotation,
+        'brightness': brightness, 'contrast': contrast, 'saturation': saturation,
       };
   factory VideoClip.fromJson(Map<String, dynamic> j) => VideoClip(
         id: j['id'] as String, assetId: j['assetId'] as String,
@@ -112,6 +127,9 @@ class VideoClip {
         speed: ((j['speed'] ?? 1.0) as num).toDouble(),
         volume: ((j['volume'] ?? 1.0) as num).toDouble(),
         rotation: ((j['rotation'] ?? 0) as num).toInt(),
+        brightness: ((j['brightness'] ?? 0.0) as num).toDouble(),
+        contrast: ((j['contrast'] ?? 1.0) as num).toDouble(),
+        saturation: ((j['saturation'] ?? 1.0) as num).toDouble(),
       );
 }
 
@@ -171,6 +189,8 @@ class GraceProject {
   final List<VideoClip> clips = [];
   final List<TextLayer> texts = [];
   final List<SubtitleCue> subtitles = [];
+  /// Subtitle style id ('classic' | 'bold' | 'outline'). Chosen via Jev or fallback.
+  String subtitleStyle = 'classic';
   DateTime createdAt;
   DateTime updatedAt;
 
@@ -193,6 +213,7 @@ class GraceProject {
         'clips': clips.map((c) => c.toJson()).toList(),
         'texts': texts.map((t) => t.toJson()).toList(),
         'subtitles': subtitles.map((s) => s.toJson()).toList(),
+        'subtitleStyle': subtitleStyle,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
@@ -218,6 +239,7 @@ class GraceProject {
     for (final s in (j['subtitles'] as List? ?? [])) {
       p.subtitles.add(SubtitleCue.fromJson(s as Map<String, dynamic>));
     }
+    p.subtitleStyle = (j['subtitleStyle'] ?? 'classic') as String;
     return p;
   }
 

@@ -102,6 +102,36 @@ void main() {
     });
   });
 
+  group('Phase 3 — clip props & subtitles', () {
+    test('UpdateClipPropsCommand applies and reverts', () {
+      final p = GraceProject(name: 'T', kind: ProjectKind.video);
+      final stack = CommandStack();
+      stack.execute(p, AddClipCommand(VideoClip(id: 'c1', assetId: 'a', startMs: 0, endMs: 4000)));
+      stack.execute(p, UpdateClipPropsCommand('c1',
+          speed: 2.0, volume: 0.5, rotation: 90,
+          brightness: 0.1, contrast: 1.2, saturation: 0.8));
+      final c = p.clips.first;
+      expect(c.speed, 2.0);
+      expect(c.rotation, 90);
+      expect(c.durationMs, 2000);
+      expect(stack.undo(p), true);
+      expect(p.clips.first.speed, 1.0);
+      expect(p.clips.first.rotation, 0);
+    });
+
+    test('subtitle style persists through json', () {
+      final p = GraceProject(name: 'T', kind: ProjectKind.video);
+      p.subtitleStyle = 'outline';
+      p.subtitles.add(const SubtitleCue(id: 's1', text: 'Bonjour', startMs: 0, endMs: 1500));
+      final restored = GraceProject.fromJson(p.toJson());
+      expect(restored.subtitleStyle, 'outline');
+      expect(restored.subtitles.first.text, 'Bonjour');
+      // Old files without the field default to classic.
+      final legacy = Map<String, dynamic>.from(p.toJson())..remove('subtitleStyle');
+      expect(GraceProject.fromJson(legacy).subtitleStyle, 'classic');
+    });
+  });
+
   group('Phase 2 — thumbnails & import', () {
     test('cache key changes with version/size/frame', () {
       const a = ThumbnailRequest(

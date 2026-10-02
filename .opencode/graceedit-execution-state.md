@@ -15,6 +15,7 @@
 - Bugs connus : aucun bloquant.
 - Prochaines tâches : install APK → test fumée → Phase 3 (trim UI, audio,
   sous-titres, réglages image, partage, export Media3) → Gate V1 → STOP.
-- Version/checkpoint : Phase 2 code v0.2.0 (pas encore installable vérifié).
+- Version/checkpoint : v0.2.0 release sur GitHub (APK 20.2MB). Reste : install
+  live sur device + test fumee (telephone deconnecte au moment de l'install).
 - Migrations/actions manuelles : rebrancher le téléphone (`adb devices` vide au
   dernier check) puis `adb install` ou `flutter install -d <id>`.

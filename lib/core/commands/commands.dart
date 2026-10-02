@@ -107,8 +107,7 @@ class SplitClipCommand implements ProjectCommand {
       {'type': name, 'clipId': clipId, 'splitAtMs': splitAtMs};
 }
 
-class MoveClipCommand implements ProjectCommand {
-  MoveClipCommand(this.clipId, this.newIndex);
+class MoveClipCommand implements ProjectCommand {  MoveClipCommand(this.clipId, this.newIndex);
   final String clipId;
   final int newIndex;
   int? _oldIndex;
@@ -132,6 +131,54 @@ class MoveClipCommand implements ProjectCommand {
   }
   @override Map<String, dynamic> toJson() =>
       {'type': name, 'clipId': clipId, 'newIndex': newIndex};
+}
+
+/// Generic undoable property update (speed, volume, rotation, filters).
+/// Null fields are left untouched.
+class UpdateClipPropsCommand implements ProjectCommand {
+  UpdateClipPropsCommand(this.clipId, {
+    this.speed, this.volume, this.rotation,
+    this.brightness, this.contrast, this.saturation,
+  });
+  final String clipId;
+  final double? speed;
+  final double? volume;
+  final int? rotation;
+  final double? brightness;
+  final double? contrast;
+  final double? saturation;
+  VideoClip? _before;
+
+  @override
+  String get name => 'UpdateClipProps';
+
+  @override
+  void apply(GraceProject p) {
+    final i = p.clips.indexWhere((c) => c.id == clipId);
+    if (i < 0) return;
+    _before ??= p.clips[i];
+    p.clips[i] = p.clips[i].copyWith(
+      speed: speed, volume: volume, rotation: rotation,
+      brightness: brightness, contrast: contrast, saturation: saturation,
+    );
+    p.touch();
+  }
+
+  @override
+  void revert(GraceProject p) {
+    if (_before == null) return;
+    final i = p.clips.indexWhere((c) => c.id == clipId);
+    if (i < 0) return;
+    p.clips[i] = _before!;
+    p.touch();
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': name, 'clipId': clipId,
+        'speed': speed, 'volume': volume, 'rotation': rotation,
+        'brightness': brightness, 'contrast': contrast, 'saturation': saturation,
+      };
 }
 
 /// Simple in-memory command stack with undo/redo.

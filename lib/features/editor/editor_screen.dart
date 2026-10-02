@@ -18,6 +18,24 @@ import '../../core/services/thumbnails.dart';
 import '../../core/state/providers.dart';
 import '../../theme/tokens.dart';
 import '../library/thumb_widget.dart';
+import 'subtitles_screen.dart';
+
+/// Builds a 4x5 color matrix for brightness/contrast/saturation adjustments.
+/// brightness: -1..1, contrast/saturation: multipliers around 1.
+List<double> graceColorMatrix(double brightness, double contrast, double saturation) {
+  final b = brightness * 255.0;
+  // Saturation matrix (luminance weights) scaled by [saturation].
+  final s = saturation;
+  final sr = (1 - s) * 0.2126, sg = (1 - s) * 0.7152, sb = (1 - s) * 0.0722;
+  // Combined: first saturation, then contrast + brightness offset.
+  final m = [
+    (sr + s) * contrast, sg * contrast, sb * contrast, 0, b,
+    sr * contrast, (sg + s) * contrast, sb * contrast, 0, b,
+    sr * contrast, sg * contrast, (sb + s) * contrast, 0, b,
+    0, 0, 0, 1, 0,
+  ];
+  return m;
+}
 
 final importServiceProvider =
     Provider<ImportService>((ref) => ImportService());
@@ -202,6 +220,15 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                   child: CircularProgressIndicator(strokeWidth: 2)),
             ),
           IconButton(
+            tooltip: 'Sous-titres',
+            icon: Badge(
+              isLabelVisible: p.subtitles.isNotEmpty,
+              label: Text('${p.subtitles.length}'),
+              child: const Icon(Icons.closed_caption_outlined),
+            ),
+            onPressed: () => context.push('/subtitles'),
+          ),
+          IconButton(
             tooltip: 'Bibliothèque',
             icon: const Icon(Icons.photo_library_outlined),
             onPressed: () => context.push('/assets'),
@@ -242,7 +269,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                 borderRadius: BorderRadius.circular(GraceRadius.l),
               ),
               clipBehavior: Clip.antiAlias,
-              child: _buildPreview(p, selectedAsset, g, strings),
+              child: _buildPreview(p, selected, selectedAsset, g),
             ),
           ),
           // Timeline with real thumbnails.
@@ -334,6 +361,26 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                       _exec(SplitClipCommand(clip.id, mid));
                     }),
                 _Action(
+                    icon: Icons.crop_outlined, label: strings.trim,
+                    enabled: selected != null,
+                    onTap: _trimSheet),
+                _Action(
+                    icon: Icons.speed_outlined, label: 'Vitesse',
+                    enabled: selected != null,
+                    onTap: _speedVolumeSheet),
+                _Action(
+                    icon: Icons.tune_outlined, label: 'Filtres',
+                    enabled: selected != null,
+                    onTap: _filterSheet),
+                _Action(
+                    icon: Icons.rotate_right_outlined, label: 'Rotation',
+                    enabled: selected != null,
+                    onTap: () {
+                      final clip = selected!;
+                      _exec(UpdateClipPropsCommand(
+                          clip.id, rotation: (clip.rotation + 90) % 360));
+                    }),
+                _Action(
                     icon: Icons.delete_outline, label: strings.delete,
                     enabled: selected != null,
                     onTap: () {
@@ -411,17 +458,209 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     );
   }
 
-  Widget _buildPreview(GraceProject p, MediaAsset? asset, GraceColors g,
-      dynamic strings) {
+  Future<void> _trimSheet() async {
+    final s = ref.read(editorSessionProvider);
+    final idx = _selectedClipIndex;
+    if (s == null || idx == null || idx >= s.project.clips.length) return;
+    final clip = s.project.clips[idx];
+    MediaAsset? asset;
+    for (final a in s.project.assets) {
+      if (a.id == clip.assetId) asset = a;
+    }
+    final maxMs = (asset?.durationMs ?? clip.endMs).toDouble();
+    var start = clip.startMs.toDouble();
+    var end = clip.endMs.toDouble();
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setB) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Rogner : ${(start / 1000).toStringAsFixed(1)}s → ${(end / 1000).toStringAsFixed(1)}s',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                RangeSlider(
+                  values: RangeValues(start, end),
+                  max: maxMs,
+                  divisions: maxMs.round().clamp(1, 600),
+                  labels: RangeLabels(
+                    '${(start / 1000).toStringAsFixed(1)}s',
+                    '${(end / 1000).toStringAsFixed(1)}s',
+                  ),
+                  onChanged: (v) => setB(() {
+                    start = v.start;
+                    end = v.end;
+                  }),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: end - start >= 500
+                        ? () => Navigator.pop(c, true)
+                        : null,
+                    child: const Text('Appliquer (min 0,5s)'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (ok == true) {
+      _exec(TrimClipCommand(clip.id,
+          newStartMs: start.round(), newEndMs: end.round()));
+    }
+  }
+
+  Future<void> _speedVolumeSheet() async {
+    final s = ref.read(editorSessionProvider);
+    final idx = _selectedClipIndex;
+    if (s == null || idx == null || idx >= s.project.clips.length) return;
+    final clip = s.project.clips[idx];
+    var speed = clip.speed;
+    var volume = clip.volume;
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setB) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Vitesse : ×${speed.toStringAsFixed(2)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Slider(
+                    value: speed, min: 0.5, max: 2.0, divisions: 6,
+                    label: '×${speed.toStringAsFixed(2)}',
+                    onChanged: (v) => setB(() => speed = v)),
+                Text('Volume : ${(volume * 100).round()} %',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Slider(
+                    value: volume, min: 0.0, max: 1.0, divisions: 10,
+                    label: '${(volume * 100).round()} %',
+                    onChanged: (v) => setB(() => volume = v)),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(c, true),
+                    child: const Text('Appliquer'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (ok == true) {
+      _exec(UpdateClipPropsCommand(clip.id, speed: speed, volume: volume));
+    }
+  }
+
+  Future<void> _filterSheet() async {
+    final s = ref.read(editorSessionProvider);
+    final idx = _selectedClipIndex;
+    if (s == null || idx == null || idx >= s.project.clips.length) return;
+    final clip = s.project.clips[idx];
+    var brightness = clip.brightness;
+    var contrast = clip.contrast;
+    var saturation = clip.saturation;
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setB) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Luminosité : ${brightness.toStringAsFixed(2)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Slider(
+                    value: brightness, min: -0.5, max: 0.5, divisions: 20,
+                    onChanged: (v) => setB(() => brightness = v)),
+                Text('Contraste : ${contrast.toStringAsFixed(2)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Slider(
+                    value: contrast, min: 0.5, max: 1.5, divisions: 20,
+                    onChanged: (v) => setB(() => contrast = v)),
+                Text('Saturation : ${saturation.toStringAsFixed(2)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Slider(
+                    value: saturation, min: 0.0, max: 2.0, divisions: 20,
+                    onChanged: (v) => setB(() => saturation = v)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => setB(() {
+                          brightness = 0.0;
+                          contrast = 1.0;
+                          saturation = 1.0;
+                        }),
+                        child: const Text('Réinitialiser'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(c, true),
+                        child: const Text('Appliquer'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (ok == true) {
+      _exec(UpdateClipPropsCommand(clip.id,
+          brightness: brightness, contrast: contrast, saturation: saturation));
+    }
+  }
+
+  Widget _buildPreview(
+      GraceProject p, VideoClip? clip, MediaAsset? asset, GraceColors g) {
+    Widget applyEffects(Widget child) {
+      var out = child;
+      if (clip != null &&
+          (clip.brightness != 0.0 ||
+              clip.contrast != 1.0 ||
+              clip.saturation != 1.0)) {
+        out = ColorFiltered(
+          colorFilter: ColorFilter.matrix(graceColorMatrix(
+              clip.brightness, clip.contrast, clip.saturation)),
+          child: out,
+        );
+      }
+      if (clip != null && clip.rotation != 0) {
+        out = RotatedBox(quarterTurns: (clip.rotation ~/ 90) % 4, child: out);
+      }
+      return out;
+    }
+
     if (asset != null &&
         asset.kind == MediaKind.video &&
         File(asset.path).existsSync()) {
-      return _PreviewPlayer(key: ValueKey(asset.id), path: asset.path);
+      return applyEffects(
+          _PreviewPlayer(key: ValueKey(asset.id), path: asset.path));
     }
     if (asset != null &&
         asset.kind == MediaKind.image &&
         File(asset.path).existsSync()) {
-      return Stack(
+      return applyEffects(Stack(
         fit: StackFit.expand,
         children: [
           Image.file(File(asset.path), fit: BoxFit.contain,
@@ -437,7 +676,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                       shadows: [Shadow(blurRadius: 8)])),
             ),
         ],
-      );
+      ));
     }
     // Empty state.
     return Center(

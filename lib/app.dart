@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'core/state/providers.dart';
 import 'features/editor/editor_screen.dart';
+import 'features/editor/subtitles_screen.dart';
 import 'features/export/export_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/library/assets_screen.dart';
@@ -30,6 +31,7 @@ GoRouter buildRouter() => GoRouter(
           path: '/editor/:id',
           builder: (c, s) => EditorScreen(projectId: s.pathParameters['id']!),
         ),
+        GoRoute(path: '/subtitles', builder: (c, s) => const SubtitlesScreen()),
         GoRoute(path: '/export/:id', builder: (c, s) => const ExportScreen()),
       ],
     );
