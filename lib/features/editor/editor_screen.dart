@@ -28,11 +28,11 @@ List<double> graceColorMatrix(double brightness, double contrast, double saturat
   final s = saturation;
   final sr = (1 - s) * 0.2126, sg = (1 - s) * 0.7152, sb = (1 - s) * 0.0722;
   // Combined: first saturation, then contrast + brightness offset.
-  final m = [
-    (sr + s) * contrast, sg * contrast, sb * contrast, 0, b,
-    sr * contrast, (sg + s) * contrast, sb * contrast, 0, b,
-    sr * contrast, sg * contrast, (sb + s) * contrast, 0, b,
-    0, 0, 0, 1, 0,
+  final List<double> m = [
+    (sr + s) * contrast, sg * contrast, sb * contrast, 0.0, b,
+    sr * contrast, (sg + s) * contrast, sb * contrast, 0.0, b,
+    sr * contrast, sg * contrast, (sb + s) * contrast, 0.0, b,
+    0.0, 0.0, 0.0, 1.0, 0.0,
   ];
   return m;
 }
