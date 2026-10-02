@@ -128,8 +128,8 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
             }
             videoEffects.add(
                 Presentation.createForWidthAndHeight(
-                    width, height, Presentation.RESIZE_MODE_FILL))
-            sequenceBuilder.addEditedMediaItem(
+                    width, height, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP))
+            sequenceBuilder.addItem(
                 EditedMediaItem.Builder(mediaItem)
                     .setEffects(Effects(emptyList<AudioProcessor>(), videoEffects))
                     .build())
