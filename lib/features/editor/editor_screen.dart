@@ -750,8 +750,15 @@ class _PreviewPlayerState extends State<_PreviewPlayer> {
       );
     }
     return GestureDetector(
-      onTap: () => setState(
-          () => c.value.isPlaying ? c.pause() : c.play()),
+      onTap: () {
+        if (!mounted) return;
+        if (c.value.isPlaying) {
+          c.pause();
+        } else {
+          c.play();
+        }
+        setState(() {});
+      },
       child: Stack(
         fit: StackFit.expand,
         children: [
