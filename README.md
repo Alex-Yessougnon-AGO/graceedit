@@ -25,6 +25,16 @@ flutter test
 flutter run
 ```
 
+## Installer l'app (Android)
+
+- **Depuis GitHub** : page Releases → télécharge `app-release.apk` → ouvre le
+  fichier sur le téléphone → autorise l'installation → c'est tout.
+- **En dev** : branche le téléphone (débogage USB ou sans fil), puis
+  `flutter run -d <device-id>`.
+
+Chaque tag `v*` poussé sur GitHub déclenche le workflow `.github/workflows/release.yml`
+qui build et attache l'APK à la release automatiquement.
+
 ## Modèle projet
 
 `GraceProject` (schema v1) : metadata, canvas, assets, clips vidéo,
