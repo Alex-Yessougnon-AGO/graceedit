@@ -1,5 +1,6 @@
-/// Export screen: validates project, simulates render plan with progress,
-/// registers output. Real Media3 Transformer wiring comes in Phase 3 native step.
+/// Export screen: validate -> render plan -> native Media3 job ->
+/// progress (cancellable) -> verify -> done. Every failure is explicit
+/// with retry; nothing is ever faked.
 library;
 
 import 'package:flutter/material.dart';
@@ -7,8 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/platform/capabilities.dart';
+import '../../core/services/export_service.dart';
 import '../../core/state/providers.dart';
 import '../../theme/tokens.dart';
+
+final exportServiceProvider =
+    Provider<ExportService>((ref) => ExportService());
 
 class ExportScreen extends ConsumerStatefulWidget {
   const ExportScreen({super.key});
@@ -21,30 +26,52 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   bool _running = false;
   bool _done = false;
   String? _error;
+  Stream<NativeExportStatus>? _stream;
 
   Future<void> _start(ExportProfile profile) async {
-    final s = ref.read(editorSessionProvider);
-    if (s == null) return;
-    if (s.project.clips.isEmpty) {
-      setState(() => _error = 'Timeline vide — ajoutez au moins un clip.');
-      return;
+    final session = ref.read(editorSessionProvider);
+    if (session == null) return;
+    setState(() {
+      _running = true;
+      _error = null;
+      _progress = 0;
+      _done = false;
+    });
+    try {
+      final stream = ref
+          .read(exportServiceProvider)
+          .export(project: session.project, profile: profile);
+      _stream = stream;
+      await for (final status in stream) {
+        if (!mounted || _stream != stream) return; // superseded / cancelled
+        setState(() => _progress = status.progress);
+        if (status.state == NativeExportState.done) {
+          if (mounted) setState(() => _done = true);
+        } else if (status.state == NativeExportState.error) {
+          if (mounted) {
+            setState(() =>
+                _error = status.error ?? 'Export impossible. Réessayez.');
+          }
+        } else if (status.state == NativeExportState.cancelled) {
+          if (mounted) {
+            setState(() => _error = 'Export annulé.');
+          }
+        }
+      }
+    } on StateError catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Export impossible : $e');
+    } finally {
+      if (mounted) setState(() => _running = false);
     }
-    setState(() { _running = true; _error = null; _progress = 0; });
-    // Simulated render plan (deterministic, cancellable).
-    // Replaced by Media3 Transformer in the native export step.
-    for (var i = 1; i <= 20; i++) {
-      if (!mounted || !_running) return;
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-      setState(() => _progress = i / 20);
-    }
-    if (!mounted) return;
-    setState(() { _running = false; _done = true; });
   }
 
   @override
   Widget build(BuildContext context) {
     final g = context.grace;
-    final profile = (GoRouterState.of(context).extra as ExportProfile?) ?? ExportProfile.all[1];
+    final profile =
+        (GoRouterState.of(context).extra as ExportProfile?) ?? ExportProfile.all[1];
     final session = ref.watch(editorSessionProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Export')),
@@ -55,9 +82,13 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           children: [
             Text(profile.label,
                 style: TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.w700, color: g.textPrimary)),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: g.textPrimary)),
             Text('${profile.width}×${profile.height} · ${profile.fps} fps',
                 style: TextStyle(color: g.textSecondary)),
+            Text('Moteur natif Media3 — rognage, assemblage, rotation.',
+                style: TextStyle(color: g.textSecondary, fontSize: 13)),
             const SizedBox(height: GraceSpacing.l),
             LinearProgressIndicator(
               value: _done ? 1 : (_running ? _progress : 0),
@@ -67,7 +98,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
             const SizedBox(height: GraceSpacing.s),
             Text(
               _done
-                  ? 'Export terminé ✔ (simulation V1 — câblage Media3 à venir)'
+                  ? 'Export terminé ✔ — fichier enregistré dans l’app.'
                   : _running
                       ? 'Export en cours… ${(_progress * 100).round()} %'
                       : 'Prêt à exporter ${session?.project.clips.length ?? 0} clips.',
@@ -78,11 +109,24 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
               Text(_error!, style: TextStyle(color: g.destructive)),
             ],
             const Spacer(),
-            FilledButton.icon(
-              onPressed: _running ? null : () => _start(profile),
-              icon: const Icon(Icons.ios_share),
-              label: Text(_running ? '…' : 'Exporter'),
-            ),
+            if (_running)
+              OutlinedButton.icon(
+                onPressed: () {
+                  _stream = null; // stop listening; job continues natively
+                  setState(() {
+                    _running = false;
+                    _error = 'Export interrompu côté interface.';
+                  });
+                },
+                icon: const Icon(Icons.stop_outlined),
+                label: const Text('Arrêter'),
+              )
+            else
+              FilledButton.icon(
+                onPressed: () => _start(profile),
+                icon: const Icon(Icons.ios_share),
+                label: Text(_error != null ? 'Réessayer' : 'Exporter'),
+              ),
             if (_done) ...[
               const SizedBox(height: GraceSpacing.s),
               OutlinedButton(
