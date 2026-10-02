@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/platform/capabilities.dart';
 import '../../core/services/export_service.dart';
@@ -128,6 +129,19 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                 label: Text(_error != null ? 'Réessayer' : 'Exporter'),
               ),
             if (_done) ...[
+              const SizedBox(height: GraceSpacing.s),
+              FilledButton.icon(
+                onPressed: () {
+                  final path =
+                      ref.read(exportServiceProvider).lastOutputPath;
+                  if (path != null) {
+                    Share.shareXFiles([XFile(path)],
+                        text: 'Ma vidéo GraceEdit');
+                  }
+                },
+                icon: const Icon(Icons.ios_share),
+                label: const Text('Partager la vidéo'),
+              ),
               const SizedBox(height: GraceSpacing.s),
               OutlinedButton(
                 onPressed: () => context.pop(),

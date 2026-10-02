@@ -27,6 +27,9 @@ class ExportService {
       : _channel = channel ?? const MethodChannel('graceedit/export');
   final MethodChannel _channel;
 
+  /// Output file of the last started export (null if none).
+  String? lastOutputPath;
+
   /// Builds the render plan from the project and runs it natively.
   /// Emits progress 0..1. Throws on validation or native error.
   Stream<NativeExportStatus> export({
@@ -66,6 +69,7 @@ class ExportService {
     if (!await dir.exists()) await dir.create(recursive: true);
     final outPath =
         '${dir.path}/${project.id}_${profile.id.name}_${DateTime.now().millisecondsSinceEpoch}.mp4';
+    lastOutputPath = outPath;
 
     late final String jobId;
     try {
