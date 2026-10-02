@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graceedit/core/ai/decision_provider.dart';
 import 'package:graceedit/core/commands/commands.dart';
 import 'package:graceedit/core/models/grace_project.dart';
 import 'package:graceedit/core/platform/capabilities.dart';
+import 'package:graceedit/core/services/import_service.dart';
+import 'package:graceedit/core/services/thumbnails.dart';
 
 void main() {
   group('GraceProject model', () {
@@ -95,6 +99,35 @@ void main() {
       expect(mock.isMock, true);
       final r = await mock.generate(prompt: 'affiche conférence');
       expect(r.metadata['mock'], true);
+    });
+  });
+
+  group('Phase 2 — thumbnails & import', () {
+    test('cache key changes with version/size/frame', () {
+      const a = ThumbnailRequest(
+          assetId: 'x', sourcePath: '/tmp/a.mp4', sourceVersion: 1);
+      const b = ThumbnailRequest(
+          assetId: 'x', sourcePath: '/tmp/a.mp4', sourceVersion: 2);
+      const c = ThumbnailRequest(
+          assetId: 'x', sourcePath: '/tmp/a.mp4', sourceVersion: 1, frameMs: 800);
+      expect(a.cacheKey, isNot(b.cacheKey));
+      expect(a.cacheKey, isNot(c.cacheKey));
+    });
+
+    test('representative frame is never 0 and stays bounded', () {
+      expect(ThumbnailService.representativeFrameMs(0), greaterThan(0));
+      expect(ThumbnailService.representativeFrameMs(60000), lessThanOrEqualTo(5000));
+      expect(ThumbnailService.representativeFrameMs(10000), 1000);
+    });
+
+    test('isReadable rejects empty/missing files', () async {
+      expect(await ImportService.isReadable('/tmp/graceedit_missing_xyz.mp4'), false);
+      final empty = File('${Directory.systemTemp.path}/grace_empty_test.bin');
+      await empty.writeAsBytes([]);
+      expect(await ImportService.isReadable(empty.path), false);
+      await empty.writeAsBytes([1, 2, 3]);
+      expect(await ImportService.isReadable(empty.path), true);
+      await empty.delete();
     });
   });
 }

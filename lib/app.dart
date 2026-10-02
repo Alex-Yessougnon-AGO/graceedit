@@ -8,14 +8,24 @@ import 'core/state/providers.dart';
 import 'features/editor/editor_screen.dart';
 import 'features/export/export_screen.dart';
 import 'features/home/home_screen.dart';
+import 'features/library/assets_screen.dart';
+import 'features/onboarding/onboarding_screen.dart';
+import 'features/onboarding/permissions_screen.dart';
+import 'features/onboarding/splash_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'theme/tokens.dart';
 
 GoRouter buildRouter() => GoRouter(
-      initialLocation: '/',
+      initialLocation: '/splash',
       routes: [
+        GoRoute(path: '/splash', builder: (c, s) => const SplashScreen()),
+        GoRoute(path: '/onboarding', builder: (c, s) => const OnboardingScreen()),
+        GoRoute(
+            path: '/permissions',
+            builder: (c, s) => const PermissionsScreen()),
         GoRoute(path: '/', builder: (c, s) => const HomeScreen()),
         GoRoute(path: '/settings', builder: (c, s) => const SettingsScreen()),
+        GoRoute(path: '/assets', builder: (c, s) => const AssetsScreen()),
         GoRoute(
           path: '/editor/:id',
           builder: (c, s) => EditorScreen(projectId: s.pathParameters['id']!),

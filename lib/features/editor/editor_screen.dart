@@ -1,16 +1,26 @@
-/// Simple (beginner) video editor: preview placeholder, timeline, trim/split/delete,
-/// text layer, undo/redo, autosave, export profile picker (real capability filter).
+/// Simple (beginner) video editor: real import, video preview,
+/// timeline with thumbnails, trim/split/delete, text, undo/redo,
+/// autosave, export profile picker.
 library;
+
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../core/commands/commands.dart';
 import '../../core/models/grace_project.dart';
 import '../../core/platform/capabilities.dart';
+import '../../core/services/import_service.dart';
+import '../../core/services/thumbnails.dart';
 import '../../core/state/providers.dart';
 import '../../theme/tokens.dart';
+import '../library/thumb_widget.dart';
+
+final importServiceProvider =
+    Provider<ImportService>((ref) => ImportService());
 
 class EditorScreen extends ConsumerStatefulWidget {
   const EditorScreen({super.key, required this.projectId});
@@ -22,13 +32,15 @@ class EditorScreen extends ConsumerStatefulWidget {
 
 class _EditorScreenState extends ConsumerState<EditorScreen> {
   bool _saving = false;
+  bool _importing = false;
+  String? _notice;
   ExportProfile _profile = ExportProfile.all[1];
   int? _selectedClipIndex;
 
   EditorSession? get _session => ref.watch(editorSessionProvider);
 
   Future<void> _persist() async {
-    final s = _session;
+    final s = ref.read(editorSessionProvider);
     if (s == null) return;
     setState(() => _saving = true);
     try {
@@ -40,11 +52,110 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   }
 
   void _exec(ProjectCommand cmd) {
-    final s = _session;
+    final s = ref.read(editorSessionProvider);
     if (s == null) return;
     setState(() => s.commands.execute(s.project, cmd));
     ref.read(projectRepositoryProvider).markDirty(s.project.id);
     _persist();
+  }
+
+  Future<void> _importMenu() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.video_library_outlined),
+              title: const Text('Vidéo de la galerie'),
+              onTap: () => Navigator.pop(c, 'video_gallery'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam_outlined),
+              title: const Text('Filmer une vidéo'),
+              onTap: () => Navigator.pop(c, 'video_camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Photo de la galerie'),
+              onTap: () => Navigator.pop(c, 'image_gallery'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Prendre une photo'),
+              onTap: () => Navigator.pop(c, 'image_camera'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null) return;
+    final svc = ref.read(importServiceProvider);
+    setState(() { _importing = true; _notice = null; });
+    try {
+      ImportResult? result;
+      switch (choice) {
+        case 'video_gallery':
+          result = await svc.pickVideo(source: ImportSource.gallery);
+        case 'video_camera':
+          result = await svc.pickVideo(source: ImportSource.camera);
+        case 'image_gallery':
+          result = await svc.pickImage(source: ImportSource.gallery);
+        case 'image_camera':
+          result = await svc.pickImage(source: ImportSource.camera);
+      }
+      if (result == null) return; // cancelled
+      if (!await ImportService.isReadable(result.asset.path)) {
+        if (mounted) {
+          setState(() => _notice = 'Fichier illisible ou vide — import annulé.');
+        }
+        return;
+      }
+      final s = ref.read(editorSessionProvider);
+      if (s == null) return;
+      var asset = result.asset;
+      // Probe real video duration when possible.
+      if (asset.kind == MediaKind.video) {
+        final ms = await _probeVideoMs(asset.path);
+        if (ms != null && ms > 0) {
+          asset = MediaAsset(
+            id: asset.id, kind: asset.kind, path: asset.path,
+            durationMs: ms, source: asset.source,
+          );
+        }
+      }
+      setState(() => s.project.assets.add(asset));
+      if (asset.kind == MediaKind.video) {
+        final end = asset.durationMs ?? 5000;
+        _exec(AddClipCommand(VideoClip(
+          id: GraceProject.newId(), assetId: asset.id,
+          startMs: 0, endMs: end,
+        )));
+      } else {
+        // Photo => 3s still clip backed by the image.
+        _exec(AddClipCommand(VideoClip(
+          id: GraceProject.newId(), assetId: asset.id,
+          startMs: 0, endMs: 3000,
+        )));
+      }
+    } on Exception catch (e) {
+      if (mounted) setState(() => _notice = 'Import impossible : $e');
+    } finally {
+      if (mounted) setState(() => _importing = false);
+    }
+  }
+
+  Future<int?> _probeVideoMs(String path) async {
+    try {
+      final c = VideoPlayerController.file(File(path));
+      await c.initialize();
+      final ms = c.value.duration.inMilliseconds;
+      await c.dispose();
+      return ms > 0 ? ms : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -60,6 +171,16 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     }
     final p = s.project;
     final profiles = ExportProfile.supportedBy(DeviceCapabilities.fallback);
+    VideoClip? selected;
+    if (_selectedClipIndex != null && _selectedClipIndex! < p.clips.length) {
+      selected = p.clips[_selectedClipIndex!];
+    }
+    MediaAsset? selectedAsset;
+    if (selected != null) {
+      for (final a in p.assets) {
+        if (a.id == selected.assetId) selectedAsset = a;
+      }
+    }
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -81,6 +202,11 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                   child: CircularProgressIndicator(strokeWidth: 2)),
             ),
           IconButton(
+            tooltip: 'Bibliothèque',
+            icon: const Icon(Icons.photo_library_outlined),
+            onPressed: () => context.push('/assets'),
+          ),
+          IconButton(
             tooltip: strings.undo,
             icon: const Icon(Icons.undo),
             onPressed: s.commands.canUndo
@@ -98,53 +224,28 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       ),
       body: Column(
         children: [
-          // Preview area
+          if (_notice != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: g.elevated,
+              child: Text(_notice!,
+                  style: TextStyle(color: g.textSecondary, fontSize: 13)),
+            ),
+          // Preview area: real video playback when a video clip is selected.
           Expanded(
             child: Container(
               margin: const EdgeInsets.all(GraceSpacing.m),
               decoration: BoxDecoration(
-                color: g.surface,
+                color: Colors.black,
                 border: Border.all(color: g.border),
                 borderRadius: BorderRadius.circular(GraceRadius.l),
               ),
-              child: Center(
-                child: p.clips.isEmpty
-                    ? Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.movie_outlined, size: 56, color: g.textSecondary),
-                          const SizedBox(height: 8),
-                          Text(strings.preview,
-                              style: TextStyle(color: g.textSecondary, fontSize: 16)),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${p.canvas.width}×${p.canvas.height} · ${p.canvas.fps} fps',
-                            style: TextStyle(color: g.textSecondary, fontSize: 13),
-                          ),
-                        ],
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.play_circle_outline, size: 56, color: g.primary),
-                          const SizedBox(height: 8),
-                          Text('${p.clips.length} clips · ${p.formatDuration()}',
-                              style: TextStyle(color: g.textPrimary, fontSize: 16)),
-                          if (p.texts.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: Text(
-                                p.texts.last.text,
-                                style: const TextStyle(
-                                    fontSize: 24, fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                        ],
-                      ),
-              ),
+              clipBehavior: Clip.antiAlias,
+              child: _buildPreview(p, selectedAsset, g, strings),
             ),
           ),
-          // Timeline
+          // Timeline with real thumbnails.
           Container(
             height: 120,
             padding: const EdgeInsets.symmetric(horizontal: GraceSpacing.m),
@@ -161,7 +262,11 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                     },
                     itemBuilder: (c, i) {
                       final clip = p.clips[i];
-                      final selected = _selectedClipIndex == i;
+                      MediaAsset? asset;
+                      for (final a in p.assets) {
+                        if (a.id == clip.assetId) asset = a;
+                      }
+                      final sel = _selectedClipIndex == i;
                       return GestureDetector(
                         key: ValueKey(clip.id),
                         onTap: () => setState(() => _selectedClipIndex = i),
@@ -169,21 +274,38 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                           width: 110,
                           margin: const EdgeInsets.only(right: 8),
                           decoration: BoxDecoration(
-                            color: selected ? g.elevated : g.surface,
+                            color: g.surface,
                             border: Border.all(
-                                color: selected ? g.primary : g.border, width: selected ? 2 : 1),
-                            borderRadius: BorderRadius.circular(GraceRadius.m),
+                                color: sel ? g.primary : g.border,
+                                width: sel ? 2 : 1),
+                            borderRadius:
+                                BorderRadius.circular(GraceRadius.m),
                           ),
+                          clipBehavior: Clip.antiAlias,
                           child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.movie_creation_outlined, size: 28),
-                              const SizedBox(height: 4),
-                              Text('${(clip.durationMs / 1000).toStringAsFixed(1)}s',
-                                  style: const TextStyle(fontSize: 13)),
-                              Text('×${clip.speed}',
-                                  style: TextStyle(
-                                      fontSize: 12, color: g.textSecondary)),
+                              Expanded(
+                                child: asset == null
+                                    ? const Icon(Icons.broken_image_outlined)
+                                    : GraceThumb(
+                                        assetId: asset.id,
+                                        sourcePath: asset.path,
+                                        kind: asset.kind.name,
+                                        frameMs: ThumbnailService
+                                            .representativeFrameMs(
+                                                clip.durationMs),
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        borderRadius: 0,
+                                      ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Text(
+                                  '${(clip.durationMs / 1000).toStringAsFixed(1)}s · ×${clip.speed}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -191,43 +313,31 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                     },
                   ),
           ),
-          // Contextual actions
+          // Contextual actions.
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.all(GraceSpacing.m),
             child: Row(
               children: [
                 _Action(
-                    icon: Icons.add, label: 'Clip',
-                    onTap: () {
-                      final asset = MediaAsset(
-                        id: GraceProject.newId(), kind: MediaKind.video,
-                        path: 'local/demo_${DateTime.now().millisecondsSinceEpoch}.mp4',
-                        durationMs: 5000, width: 1920, height: 1080,
-                      );
-                      p.assets.add(asset);
-                      _exec(AddClipCommand(VideoClip(
-                        id: GraceProject.newId(), assetId: asset.id,
-                        startMs: 0, endMs: 5000,
-                      )));
-                    }),
+                  icon: Icons.add_photo_alternate_outlined,
+                  label: _importing ? '…' : 'Importer',
+                  onTap: _importing ? null : _importMenu,
+                ),
                 _Action(
                     icon: Icons.content_cut, label: strings.split,
-                    enabled: _selectedClipIndex != null && p.clips.isNotEmpty,
+                    enabled: selected != null,
                     onTap: () {
-                      final i = _selectedClipIndex!;
-                      if (i >= p.clips.length) return;
-                      final clip = p.clips[i];
-                      final mid = (clip.startMs + clip.endMs) ~/ 2;
+                      final clip = selected!;
+                      final mid =
+                          (clip.startMs + clip.endMs) ~/ 2;
                       _exec(SplitClipCommand(clip.id, mid));
                     }),
                 _Action(
                     icon: Icons.delete_outline, label: strings.delete,
-                    enabled: _selectedClipIndex != null && p.clips.isNotEmpty,
+                    enabled: selected != null,
                     onTap: () {
-                      final i = _selectedClipIndex!;
-                      if (i >= p.clips.length) return;
-                      _exec(RemoveClipCommand(p.clips[i].id));
+                      _exec(RemoveClipCommand(selected!.id));
                       setState(() => _selectedClipIndex = null);
                     }),
                 _Action(
@@ -258,7 +368,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
               ],
             ),
           ),
-          // Export bar
+          // Export bar.
           Container(
             padding: const EdgeInsets.fromLTRB(
                 GraceSpacing.m, GraceSpacing.s, GraceSpacing.m, GraceSpacing.m),
@@ -270,9 +380,12 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<ExportProfile>(
-                    initialValue: profiles.contains(_profile) ? _profile : profiles.first,
+                    initialValue: profiles.contains(_profile)
+                        ? _profile
+                        : profiles.first,
                     decoration: const InputDecoration(
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                        contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8)),
                     items: [
                       for (final pr in profiles)
                         DropdownMenuItem(value: pr, child: Text(pr.label)),
@@ -297,13 +410,139 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       ),
     );
   }
+
+  Widget _buildPreview(GraceProject p, MediaAsset? asset, GraceColors g,
+      dynamic strings) {
+    if (asset != null &&
+        asset.kind == MediaKind.video &&
+        File(asset.path).existsSync()) {
+      return _PreviewPlayer(key: ValueKey(asset.id), path: asset.path);
+    }
+    if (asset != null &&
+        asset.kind == MediaKind.image &&
+        File(asset.path).existsSync()) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.file(File(asset.path), fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) =>
+                  const Center(child: Icon(Icons.broken_image_outlined))),
+          if (p.texts.isNotEmpty)
+            Center(
+              child: Text(p.texts.last.text,
+                  style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      shadows: [Shadow(blurRadius: 8)])),
+            ),
+        ],
+      );
+    }
+    // Empty state.
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.movie_outlined, size: 56, color: g.textSecondary),
+          const SizedBox(height: 8),
+          Text('Importez une vidéo ou une photo pour commencer',
+              style: TextStyle(color: g.textSecondary, fontSize: 15)),
+          const SizedBox(height: 4),
+          Text('${p.canvas.width}×${p.canvas.height} · ${p.canvas.fps} fps',
+              style: TextStyle(color: g.textSecondary, fontSize: 13)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Self-contained video preview with play/pause.
+class _PreviewPlayer extends StatefulWidget {
+  const _PreviewPlayer({super.key, required this.path});
+  final String path;
+
+  @override
+  State<_PreviewPlayer> createState() => _PreviewPlayerState();
+}
+
+class _PreviewPlayerState extends State<_PreviewPlayer> {
+  VideoPlayerController? _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final c = VideoPlayerController.file(File(widget.path));
+      await c.initialize();
+      await c.setLooping(true);
+      if (mounted) setState(() => _controller = c);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) {
+      return const Center(
+        child: Icon(Icons.broken_image_outlined,
+            color: Colors.white70, size: 48),
+      );
+    }
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) {
+      return const Center(
+        child: SizedBox(
+            width: 28, height: 28,
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: Colors.white70)),
+      );
+    }
+    return GestureDetector(
+      onTap: () => setState(
+          () => c.value.isPlaying ? c.pause() : c.play()),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FittedBox(
+            fit: BoxFit.contain,
+            child: SizedBox(
+                width: c.value.size.width,
+                height: c.value.size.height,
+                child: VideoPlayer(c)),
+          ),
+          if (!c.value.isPlaying)
+            const Center(
+              child: Icon(Icons.play_circle_outline,
+                  color: Colors.white, size: 64),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Action extends StatelessWidget {
-  const _Action({required this.icon, required this.label, required this.onTap, this.enabled = true});
+  const _Action(
+      {required this.icon,
+      required this.label,
+      required this.onTap,
+      this.enabled = true});
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool enabled;
 
   @override
