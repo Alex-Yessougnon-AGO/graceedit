@@ -3,11 +3,11 @@ package com.graceedit.graceedit
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.audio.AudioProcessor
-import androidx.media3.common.effect.Presentation
-import androidx.media3.common.util.Util
-import androidx.media3.transformer.ClippingConfiguration
+import androidx.media3.effect.Presentation
+import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -15,9 +15,7 @@ import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
-import androidx.media3.transformer.ScaleAndRotateTransformation
 import androidx.media3.transformer.Transformer
-import androidx.media3.common.effect.VideoEffect
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.util.UUID
@@ -107,7 +105,8 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
         height: Int,
         outPath: String,
     ) {
-        val items = clips.map { c ->
+        val sequenceBuilder = EditedMediaItemSequence.Builder()
+        for (c in clips) {
             val path = c["path"] as String
             val startMs = (c["startMs"] as Number).toLong()
             val endMs = (c["endMs"] as Number).toLong()
@@ -115,12 +114,12 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
             val mediaItem = MediaItem.Builder()
                 .setUri(path)
                 .setClippingConfiguration(
-                    ClippingConfiguration.Builder()
+                    MediaItem.ClippingConfiguration.Builder()
                         .setStartPositionMs(startMs)
                         .setEndPositionMs(endMs)
                         .build())
                 .build()
-            val videoEffects = mutableListOf<VideoEffect>()
+            val videoEffects = mutableListOf<Effect>()
             if (rotation != 0) {
                 videoEffects.add(
                     ScaleAndRotateTransformation.Builder()
@@ -130,12 +129,12 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
             videoEffects.add(
                 Presentation.createForWidthAndHeight(
                     width, height, Presentation.RESIZE_MODE_FILL))
-            EditedMediaItem.Builder(mediaItem)
-                .setEffects(Effects(emptyList<AudioProcessor>(), videoEffects))
-                .build()
+            sequenceBuilder.addEditedMediaItem(
+                EditedMediaItem.Builder(mediaItem)
+                    .setEffects(Effects(emptyList<AudioProcessor>(), videoEffects))
+                    .build())
         }
-        val sequence = EditedMediaItemSequence.sequenceOf(*items.toTypedArray())
-        val composition = Composition.Builder(listOf(sequence)).build()
+        val composition = Composition.Builder(listOf(sequenceBuilder.build())).build()
 
         lateinit var job: Job
         val transformer = Transformer.Builder(context)
@@ -157,24 +156,17 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
             .build()
         job = Job(transformer)
         jobs[jobId] = job
-        // Clean up finished jobs after a delay to bound memory.
         transformer.start(composition, outPath)
     }
 
     private fun pollProgress(job: Job) {
         try {
             val holder = ProgressHolder()
-            when (job.transformer.getProgress(holder)) {
-                Transformer.PROGRESS_STATE_AVAILABLE ->
-                    job.progress = (holder.progress / 100f).coerceIn(0f, 1f)
-                Transformer.PROGRESS_STATE_UNAVAILABLE -> Unit
-                else -> Unit
+            if (job.transformer.getProgress(holder) ==
+                Transformer.PROGRESS_STATE_AVAILABLE) {
+                job.progress = (holder.progress / 100f).coerceIn(0f, 1f)
             }
         } catch (_: Exception) {
-        }
-        // Keep callbacks on the main thread healthy.
-        if (!Util.isRunningOnMainThread()) {
-            mainHandler.post {}
         }
     }
 }
