@@ -9,6 +9,8 @@ import '../../core/l10n/strings.dart';
 import '../../core/models/grace_project.dart';
 import '../../core/state/providers.dart';
 import '../../theme/tokens.dart';
+import '../library/thumb_widget.dart';
+import '../nav/grace_nav.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -30,6 +32,7 @@ class HomeScreen extends ConsumerWidget {
           ),
         ],
       ),
+      bottomNavigationBar: const GraceNav(index: 0),
       body: ListView(
         padding: const EdgeInsets.all(GraceSpacing.m),
         children: [
@@ -62,7 +65,7 @@ class HomeScreen extends ConsumerWidget {
           const SizedBox(height: GraceSpacing.l),
           Text(strings.recentProjects,
               style: TextStyle(
-                  fontSize: 17, fontWeight: FontWeight.w600, color: g.textPrimary)),
+                  fontSize: 18, fontWeight: FontWeight.w700, color: g.textPrimary)),
           const SizedBox(height: GraceSpacing.s),
           projects.when(
             loading: () => const Center(
@@ -154,7 +157,7 @@ class _CreateCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 32, color: g.primary, semanticLabel: label),
+              Icon(icon, size: 40, color: g.primary, semanticLabel: label),
               const SizedBox(height: GraceSpacing.s),
               Text(label,
                   style: TextStyle(
@@ -178,38 +181,84 @@ class _ProjectTile extends StatelessWidget {
     return Card(
       color: g.surface,
       elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(GraceRadius.m),
         side: BorderSide(color: g.border),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          width: 56, height: 56,
-          decoration: BoxDecoration(
-            color: g.elevated,
-            borderRadius: BorderRadius.circular(GraceRadius.s),
-          ),
-          child: Icon(
-            project.kind == ProjectKind.video ? Icons.movie_outlined : Icons.image_outlined,
-            color: g.textSecondary,
-            semanticLabel: project.name,
-          ),
-        ),
-        title: Text(project.name,
-            style: TextStyle(fontWeight: FontWeight.w600, color: g.textPrimary)),
-        subtitle: Text(
-          project.clips.isEmpty
-              ? project.canvas.width.toString() +
-                  '×${project.canvas.height} · ${project.kind.name}'
-              : '${project.clips.length} clips · ${project.formatDuration()}',
-          style: TextStyle(color: g.textSecondary),
-        ),
-        trailing: const Icon(Icons.chevron_right),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(GraceRadius.m),
         onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 80, height: 60,
+                child: Stack(
+                  children: [
+                    GraceThumb(
+                      assetId: 'project-${project.id}',
+                      sourcePath: _thumbSource,
+                      kind: _thumbKind,
+                      width: 80, height: 60,
+                    ),
+                    if (project.clips.isNotEmpty)
+                      Positioned(
+                        bottom: 4, right: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(project.formatDuration(),
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 10)),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: GraceSpacing.m),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(project.name,
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: g.textPrimary)),
+                    const SizedBox(height: 4),
+                    Text(
+                      project.clips.isEmpty
+                          ? '${project.canvas.width}×${project.canvas.height} · ${project.kind.name}'
+                          : '${project.clips.length} clips · ${project.formatDuration()}',
+                      style: TextStyle(color: g.textSecondary, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: g.textSecondary),
+            ],
+          ),
+        ),
       ),
     );
   }
+
+  /// First video/image asset backs the tile thumbnail; otherwise icon fallback.
+  MediaAsset? get _firstMedia {
+    for (final a in project.assets) {
+      if (a.kind == MediaKind.video || a.kind == MediaKind.image) return a;
+    }
+    return null;
+  }
+
+  String get _thumbSource => _firstMedia?.path ?? '';
+  String get _thumbKind => _firstMedia?.kind.name ?? 'video';
 }
 
 class _ErrorBox extends StatelessWidget {

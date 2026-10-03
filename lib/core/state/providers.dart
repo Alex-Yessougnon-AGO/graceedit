@@ -9,6 +9,25 @@ import '../l10n/strings.dart';
 import '../models/grace_project.dart';
 import '../storage/project_repository.dart';
 
+class OwnedAsset {
+  const OwnedAsset({required this.projectId, required this.projectName, required this.asset});
+  final String projectId;
+  final String projectName;
+  final MediaAsset asset;
+}
+
+/// Every imported asset across all projects (global Bibliothèque).
+final allAssetsProvider = FutureProvider<List<OwnedAsset>>((ref) async {
+  final projects = await ref.watch(projectsProvider.future);
+  final out = <OwnedAsset>[];
+  for (final p in projects) {
+    for (final a in p.assets) {
+      out.add(OwnedAsset(projectId: p.id, projectName: p.name, asset: a));
+    }
+  }
+  return out;
+});
+
 final projectRepositoryProvider = Provider<ProjectRepository>((ref) => ProjectRepository());
 
 final projectsProvider = AsyncNotifierProvider<ProjectsNotifier, List<GraceProject>>(ProjectsNotifier.new);

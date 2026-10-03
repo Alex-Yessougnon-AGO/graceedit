@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/l10n/strings.dart';
 import '../../core/state/providers.dart';
+import '../nav/grace_nav.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -16,6 +17,7 @@ class SettingsScreen extends ConsumerWidget {
     final locale = ref.watch(localeProvider);
     return Scaffold(
       appBar: AppBar(title: Text(strings.settings)),
+      bottomNavigationBar: const GraceNav(index: 3),
       body: ListView(
         children: [
           ListTile(
