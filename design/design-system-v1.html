@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GraceEdit — Design System v1</title>
+<style>
+  :root{
+    --ease-out:cubic-bezier(0.23,1,0.32,1);
+    --bg:#FAF8F4; --surface:#fff; --elevated:#F3EFE8;
+    --ink:#1C1A17; --ink2:#6E675E; --border:#E5DFD5;
+    --primary:#2F5D3A; --on-primary:#fff;
+    --success:#2F7D4F; --warning:#B7791F; --destructive:#B3261E; --info:#2B6CB0;
+    --r-s:8px; --r-m:12px; --r-l:16px; --r-xl:24px;
+  }
+  [data-theme="dark"]{
+    --bg:#141210; --surface:#1E1B18; --elevated:#2A2521;
+    --ink:#F5F1EA; --ink2:#A8A094; --border:#38322C;
+    --primary:#8FBC8F; --on-primary:#142114;
+    --success:#7FBF8E; --warning:#D9A441; --destructive:#E57373; --info:#7FB3E0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+    transition:background 200ms var(--ease-out),color 200ms var(--ease-out)}
+  .wrap{max-width:1060px;margin:0 auto;padding:32px 20px 80px}
+  header.top{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  header.top h1{font-size:28px;line-height:1.1;letter-spacing:-0.01em;margin:0}
+  .sub{color:var(--ink2);margin:0 0 28px}
+  .theme-toggle{margin-left:auto;display:flex;gap:8px}
+  .theme-toggle button{border:1px solid var(--border);background:var(--surface);color:var(--ink);
+    border-radius:999px;padding:8px 16px;font-size:14px;cursor:pointer;
+    transition:transform 150ms var(--ease-out)}
+  .theme-toggle button:active{transform:scale(0.97)}
+  .theme-toggle button[aria-pressed="true"]{background:var(--primary);color:var(--on-primary);border-color:transparent}
+  section{margin:36px 0}
+  h2{font-size:20px;margin:0 0 4px}
+  .desc{color:var(--ink2);font-size:14px;margin:0 0 16px}
+  .grid{display:grid;gap:12px}
+  .swatches{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .swatch{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-m);overflow:hidden}
+  .swatch .c{height:64px}
+  .swatch .t{padding:8px 12px;font-size:13px}
+  .swatch .t b{display:block;font-size:13px}
+  .swatch .t span{color:var(--ink2);font-family:ui-monospace,monospace;font-size:12px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-l);padding:20px}
+  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .btn{border:0;border-radius:var(--r-m);min-height:52px;padding:0 24px;font-size:16px;font-weight:600;
+    cursor:pointer;transition:transform 150ms var(--ease-out),filter 150ms var(--ease-out)}
+  .btn:active{transform:scale(0.97)}
+  .btn-primary{background:var(--primary);color:var(--on-primary)}
+  .btn-outline{background:transparent;color:var(--ink);border:1px solid var(--border)}
+  .btn-danger{background:var(--destructive);color:#fff}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
+  .chip{border:1px solid var(--border);background:var(--surface);border-radius:999px;
+    padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;
+    transition:transform 150ms var(--ease-out)}
+  .chip:active{transform:scale(0.97)}
+  .chip.on{background:var(--primary);color:var(--on-primary);border-color:transparent}
+  .field{display:flex;flex-direction:column;gap:6px;min-width:220px;flex:1}
+  .field label{font-size:14px;font-weight:600}
+  .field input{border:1px solid var(--border);background:var(--surface);color:var(--ink);
+    border-radius:var(--r-m);padding:14px 16px;font-size:16px}
+  .field input:focus{outline:2px solid var(--primary);outline-offset:1px}
+  .field .hint{font-size:13px;color:var(--ink2)}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border)}
+  .tabs button{background:none;border:0;color:var(--ink2);font-size:15px;font-weight:600;
+    padding:12px 16px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--primary)}
+  .media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .media{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-m);overflow:hidden}
+  .media .thumb{aspect-ratio:16/9;background:var(--elevated);position:relative;
+    display:flex;align-items:center;justify-content:center;color:var(--ink2);font-size:13px}
+  .media .badge{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.65);color:#fff;
+    font-size:12px;padding:2px 8px;border-radius:6px}
+  .media .meta{padding:10px 12px;font-size:14px}
+  .media .meta b{display:block}
+  .media .meta span{color:var(--ink2);font-size:13px}
+  .timeline{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-l);
+    padding:16px;display:flex;gap:8px;overflow-x:auto}
+  .clip{flex:0 0 110px;border:1px solid var(--border);border-radius:var(--r-m);overflow:hidden;background:var(--bg)}
+  .clip.sel{border:2px solid var(--primary)}
+  .clip .f{height:64px;background:var(--elevated);display:flex;align-items:center;justify-content:center;
+    color:var(--ink2);font-size:12px}
+  .clip .d{text-align:center;font-size:12px;padding:4px;color:var(--ink2)}
+  .states{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .state{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-m);
+    padding:24px 16px;text-align:center;color:var(--ink2);font-size:14px}
+  .state b{display:block;color:var(--ink);margin-bottom:4px}
+  .bar{height:8px;background:var(--elevated);border-radius:4px;overflow:hidden}
+  .bar i{display:block;height:100%;width:62%;background:var(--primary);border-radius:4px}
+  .type-scale div{border-bottom:1px solid var(--border);padding:10px 0}
+  .display{font-size:30px;font-weight:700;line-height:1.1;letter-spacing:-0.01em}
+  .title{font-size:20px;font-weight:700;line-height:1.2}
+  .body{font-size:16px;line-height:1.5}
+  .caption{font-size:13px;color:var(--ink2)}
+  .a11y li{margin:6px 0;font-size:15px}
+  code{font-family:ui-monospace,monospace;font-size:.85em;background:var(--elevated);
+    padding:2px 6px;border-radius:6px}
+  @media (prefers-reduced-motion:reduce){
+    *{transition-duration:.01ms !important;animation:none !important}
+  }
+</style>
+</head>
+<body data-theme="light">
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>GraceEdit — Design System v1</h1>
+      <p class="sub">Product UI · formalisé de l'app existante · foundations + composants core</p>
+    </div>
+    <div class="theme-toggle" role="group" aria-label="Thème">
+      <button aria-pressed="true" onclick="setTheme('light',this)">Clair</button>
+      <button aria-pressed="false" onclick="setTheme('dark',this)">Sombre</button>
+    </div>
+  </header>
+
+  <section>
+    <h2>Couleurs</h2>
+    <p class="desc">Tokens sémantiques. Le mode sombre est conçu, pas inversé.</p>
+    <div class="grid swatches" id="swatches"></div>
+  </section>
+
+  <section>
+    <h2>Typographie</h2>
+    <p class="desc">Sans-serif système. Tracking resserré sur les grands corps, corps près de 0.</p>
+    <div class="card type-scale">
+      <div class="display">Display — Créez sans savoir monter</div>
+      <div class="title">Title — Projets récents</div>
+      <div class="body">Body — Importez une vidéo, coupez, ajoutez du texte, puis exportez.</div>
+      <div class="caption">Caption — 12:42 · Modifié il y a 5 min · 1080×1920</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Boutons</h2>
+    <p class="desc">Une action primaire dominante par écran. Min 48×52. Press <code>scale(0.97)</code>.</p>
+    <div class="card row">
+      <button class="btn btn-primary">Exporter</button>
+      <button class="btn btn-outline">Bibliothèque</button>
+      <button class="btn btn-danger">Supprimer</button>
+      <button class="btn btn-primary" disabled>Exporter (vide)</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Champs</h2>
+    <div class="card row">
+      <div class="field">
+        <label for="f1">Nom du projet</label>
+        <input id="f1" value="Conférence des jeunes">
+        <span class="hint">Toujours un vrai label, jamais de placeholder seul.</span>
+      </div>
+      <div class="field">
+        <label for="f2">Rechercher…</label>
+        <input id="f2" placeholder="Affiches, vidéos, templates">
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Chips &amp; onglets</h2>
+    <div class="card">
+      <div class="row" style="margin-bottom:16px">
+        <button class="chip on">Importer</button>
+        <button class="chip">Diviser</button>
+        <button class="chip">Texte</button>
+        <button class="chip" disabled>Vitesse</button>
+      </div>
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true">Montage</button>
+        <button role="tab" aria-selected="false">Audio</button>
+        <button role="tab" aria-selected="false">Texte</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Cartes média &amp; timeline</h2>
+    <p class="desc">Thumbnails = frame représentative (jamais la première par défaut). Badge durée. Sélection = anneau primaire 2px.</p>
+    <div class="media-grid" style="margin-bottom:12px">
+      <div class="media"><div class="thumb">frame 10%<span class="badge">0:45</span></div>
+        <div class="meta"><b>Sermon du dimanche</b><span>Modifié il y a 5 min</span></div></div>
+      <div class="media"><div class="thumb">frame 10%<span class="badge">1:12</span></div>
+        <div class="meta"><b>Teaser conférence</b><span>1080×1920</span></div></div>
+      <div class="media"><div class="thumb">frame 10%<span class="badge">0:08</span></div>
+        <div class="meta"><b>Intro chaîne</b><span>Brouillon</span></div></div>
+    </div>
+    <div class="timeline">
+      <div class="clip"><div class="f">thumb</div><div class="d">4,0s · ×1</div></div>
+      <div class="clip sel"><div class="f">thumb</div><div class="d">2,5s · ×1</div></div>
+      <div class="clip"><div class="f">thumb</div><div class="f" style="height:0"></div><div class="d">3,0s · ×2</div></div>
+      <div class="clip"><div class="f">thumb</div><div class="d">5,5s · ×1</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>États</h2>
+    <p class="desc">Chaque surface async shippe ses 5 états. Erreurs = cause nommée + retry. Jamais d'échec silencieux.</p>
+    <div class="states">
+      <div class="state"><b>Loading</b><div class="bar" style="margin-top:12px"><i></i></div></div>
+      <div class="state"><b>Empty</b>Aucun projet.<br>Créez votre première vidéo.</div>
+      <div class="state"><b>Error</b>Fichier illisible.<br><u>Réessayer</u></div>
+      <div class="state"><b>Offline</b>Connexion requise pour la génération.<br>Le montage reste dispo.</div>
+      <div class="state"><b>Permission refusée</b>Accès médias requis.<br><u>Ouvrir les réglages</u></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Motion &amp; accessibilité</h2>
+    <div class="card">
+      <ul class="a11y">
+        <li>Press : <code>scale(0.97)</code> 100–160ms · entrées : ease-out 150–250ms depuis <code>scale(0.95)+opacity 0</code></li>
+        <li>Cibles tactiles 48dp min (52–56 primaire) · contraste AA · labels TalkBack sur icônes seules</li>
+        <li><code>prefers-reduced-motion</code> : fondus courts, pas de slide/spring/parallaxe</li>
+        <li>La couleur n'est jamais le seul signal (icône + texte)</li>
+      </ul>
+    </div>
+  </section>
+</div>
+<script>
+  const tokens=[
+    ["background","--bg"],["surface","--surface"],["elevated","--elevated"],
+    ["textPrimary","--ink"],["textSecondary","--ink2"],["border","--border"],
+    ["primary","--primary"],["onPrimary","--on-primary"],["success","--success"],
+    ["warning","--warning"],["destructive","--destructive"],["info","--info"]];
+  function paint(){
+    const cs=getComputedStyle(document.body);
+    document.getElementById('swatches').innerHTML=tokens.map(([n,v])=>{
+      const c=cs.getPropertyValue(v).trim();
+      return `<div class="swatch"><div class="c" style="background:${c}"></div>
+        <div class="t"><b>${n}</b><span>${c}</span></div></div>`;}).join('');
+  }
+  function setTheme(t,btn){
+    document.body.dataset.theme=t;
+    document.querySelectorAll('.theme-toggle button').forEach(b=>b.setAttribute('aria-pressed','false'));
+    btn.setAttribute('aria-pressed','true');paint();
+  }
+  paint();
+</script>
+</body>
+</html>
