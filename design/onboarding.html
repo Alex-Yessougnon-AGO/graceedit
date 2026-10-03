@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GraceEdit — Onboarding</title>
+<style>
+  :root{
+    --ease-out:cubic-bezier(0.23,1,0.32,1);
+    --bg:#FAF8F4; --surface:#fff; --elevated:#F3EFE8;
+    --ink:#1C1A17; --ink2:#6E675E; --border:#E5DFD5;
+    --primary:#2F5D3A; --on-primary:#fff;
+    --success:#2F7D4F; --destructive:#B3261E;
+  }
+  [data-theme="dark"]{
+    --bg:#141210; --surface:#1E1B18; --elevated:#2A2521;
+    --ink:#F5F1EA; --ink2:#A8A094; --border:#38322C;
+    --primary:#8FBC8F; --on-primary:#142114;
+    --success:#7FBF8E; --destructive:#E57373;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#e0e0e0;display:flex;justify-content:center;align-items:center;
+    min-height:100vh;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+  .phone{width:390px;height:844px;background:var(--bg);color:var(--ink);
+    border-radius:36px;box-shadow:0 0 0 10px #333,0 0 0 12px #444,0 0 20px rgba(0,0,0,.5);
+    overflow:hidden;display:flex;flex-direction:column;position:relative;
+    transition:background 200ms var(--ease-out)}
+  .pages{flex:1;display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none}
+  .pages::-webkit-scrollbar{display:none}
+  .page{flex:0 0 100%;scroll-snap-align:center;padding:48px 32px;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .glyph{width:96px;height:96px;border-radius:28px;background:var(--elevated);
+    display:flex;align-items:center;justify-content:center;margin-bottom:32px}
+  .glyph svg{width:48px;height:48px;fill:var(--primary)}
+  h1{font-size:26px;line-height:1.15;letter-spacing:-0.01em;margin:0 0 12px}
+  p{color:var(--ink2);font-size:15px;margin:0 0 8px;white-space:pre-line}
+  .dots{display:flex;gap:8px;justify-content:center;padding:16px}
+  .dots i{width:8px;height:8px;border-radius:4px;background:var(--border);transition:all 200ms var(--ease-out)}
+  .dots i.on{width:24px;background:var(--primary)}
+  .cta{padding:16px 24px 32px}
+  .btn{width:100%;border:0;border-radius:12px;min-height:52px;font-size:16px;font-weight:600;
+    background:var(--primary);color:var(--on-primary);cursor:pointer;
+    transition:transform 150ms var(--ease-out)}
+  .btn:active{transform:scale(0.97)}
+  .seg{display:flex;background:var(--elevated);border-radius:12px;padding:4px;gap:4px;margin:8px 0 4px}
+  .seg button{flex:1;border:0;background:none;color:var(--ink2);border-radius:9px;
+    padding:10px 4px;font-size:14px;font-weight:600;cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);
+    box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .pref{text-align:left;width:100%;margin-top:16px}
+  .pref b{font-size:15px}
+  .pref .note{font-size:13px;color:var(--ink2);margin-top:12px}
+  .perm{width:100%;background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:6px 16px;margin-top:8px;text-align:left}
+  .perm .row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+  .perm .row:last-child{border-bottom:0}
+  .perm svg{width:24px;height:24px;fill:var(--ink2);flex-shrink:0}
+  .perm .t{flex:1;font-size:15px;font-weight:600}
+  .pill{font-size:12px;font-weight:700;color:var(--success)}
+  .allow{border:1px solid var(--border);background:none;color:var(--ink);border-radius:999px;
+    padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer}
+  .allow:active{transform:scale(0.97)}
+  .skip{background:none;border:0;color:var(--ink2);font-size:14px;margin-top:12px;cursor:pointer}
+  @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms !important}}
+</style>
+</head>
+<body data-theme="light">
+<div class="phone" id="phone">
+  <div class="pages" id="pages">
+    <div class="page">
+      <div class="glyph"><svg viewBox="0 0 24 24"><path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11z"/></svg></div>
+      <h1>Créez sans savoir monter</h1>
+      <p>Importez une vidéo, coupez,
+ajoutez du texte, puis exportez.</p>
+    </div>
+    <div class="page">
+      <div class="glyph"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM7 9h4v6H7zM13 9h4v3h-4z"/></svg></div>
+      <h1>Du simple au Studio</h1>
+      <p>Commencez en mode simple. Le mode Studio
+révèle la timeline multi-pistes quand vous êtes prêt.</p>
+    </div>
+    <div class="page" style="justify-content:flex-start;padding-top:88px">
+      <h1>Vos préférences</h1>
+      <p>Modifiables à tout moment dans Paramètres.</p>
+      <div class="pref">
+        <b>Thème</b>
+        <div class="seg" id="themeSeg">
+          <button aria-pressed="false" data-t="light">Clair</button>
+          <button aria-pressed="true" data-t="auto">Auto</button>
+          <button aria-pressed="false" data-t="dark">Sombre</button>
+        </div>
+        <b style="display:block;margin-top:16px">Langue</b>
+        <div class="seg" id="langSeg">
+          <button aria-pressed="true">Français</button>
+          <button aria-pressed="false">English</button>
+        </div>
+      </div>
+    </div>
+    <div class="page" style="justify-content:flex-start;padding-top:64px">
+      <h1>Autorisations</h1>
+      <p>Vos médias restent sur l'appareil. Rien n'est envoyé en ligne.</p>
+      <div class="perm">
+        <div class="row"><svg viewBox="0 0 24 24"><path d="M22 6H12l-2-2H2v16h20V6zm-2 12H4V8h16v10z"/></svg><span class="t">Photos et vidéos</span><button class="allow">Autoriser</button></div>
+        <div class="row"><svg viewBox="0 0 24 24"><path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11z"/></svg><span class="t">Caméra</span><button class="allow">Autoriser</button></div>
+        <div class="row"><svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2z"/></svg><span class="t">Microphone</span><button class="allow">Autoriser</button></div>
+      </div>
+      <button class="skip">Continuer en mode invité →</button>
+    </div>
+  </div>
+  <div class="dots" id="dots"><i class="on"></i><i></i><i></i><i></i></div>
+  <div class="cta"><button class="btn" id="next">Continuer</button></div>
+</div>
+<script>
+  const pages=document.getElementById('pages'),dots=[...document.querySelectorAll('#dots i')],
+    next=document.getElementById('next'),phone=document.getElementById('phone');
+  let idx=0;
+  function go(i){idx=Math.max(0,Math.min(3,i));
+    pages.children[idx].scrollIntoView({behavior:'instant',inline:'start'});
+    dots.forEach((d,j)=>d.classList.toggle('on',j===idx));
+    next.textContent=idx<3?'Continuer':'Commencer';}
+  pages.addEventListener('scroll',()=>{const i=Math.round(pages.scrollLeft/pages.clientWidth);
+    if(i!==idx){idx=i;dots.forEach((d,j)=>d.classList.toggle('on',j===idx));
+      next.textContent=idx<3?'Continuer':'Commencer';}},{passive:true});
+  next.onclick=()=>go(idx+1);
+  dots.forEach((d,j)=>d.onclick=()=>go(j));
+  document.querySelectorAll('#themeSeg button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#themeSeg button').forEach(x=>x.setAttribute('aria-pressed','false'));
+    b.setAttribute('aria-pressed','true');
+    const t=b.dataset.t;
+    phone.parentElement.parentElement.setAttribute('data-theme',t==='dark'?'dark':'light');
+    document.body.setAttribute('data-theme',t==='dark'?'dark':'light');});
+  document.querySelectorAll('#langSeg button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#langSeg button').forEach(x=>x.setAttribute('aria-pressed','false'));
+    b.setAttribute('aria-pressed','true');});
+  document.querySelectorAll('.allow').forEach(b=>b.onclick=()=>{
+    b.outerHTML='<span class="pill">✓ Autorisé</span>';});
+</script>
+</body>
+</html>
