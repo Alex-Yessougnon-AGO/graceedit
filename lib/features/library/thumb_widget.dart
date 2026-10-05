@@ -40,7 +40,7 @@ class GraceThumb extends ConsumerWidget {
         borderRadius: BorderRadius.circular(borderRadius),
         child: Image.file(
           f, width: width, height: height, fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _fallback(g),
+          errorBuilder: (_, _, _) => _fallback(g),
         ),
       );
     }
@@ -68,7 +68,7 @@ class GraceThumb extends ConsumerWidget {
           borderRadius: BorderRadius.circular(borderRadius),
           child: Image.file(file,
               width: width, height: height, fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _fallback(g)),
+              errorBuilder: (_, _, _) => _fallback(g)),
         );
       },
     );

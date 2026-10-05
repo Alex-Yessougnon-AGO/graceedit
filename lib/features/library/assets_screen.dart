@@ -48,7 +48,7 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
           Expanded(
             child: all.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => const Center(child: Text('Chargement impossible.')),
+              error: (_, _) => const Center(child: Text('Chargement impossible.')),
               data: (items) {
                 final shown = items
                     .where((o) =>

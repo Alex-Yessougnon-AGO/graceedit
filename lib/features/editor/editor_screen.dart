@@ -664,7 +664,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
         fit: StackFit.expand,
         children: [
           Image.file(File(asset.path), fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) =>
+              errorBuilder: (_, _, _) =>
                   const Center(child: Icon(Icons.broken_image_outlined))),
           if (p.texts.isNotEmpty)
             Center(

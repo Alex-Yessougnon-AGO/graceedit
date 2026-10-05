@@ -9,11 +9,11 @@ import 'package:path_provider/path_provider.dart';
 import '../models/grace_project.dart';
 
 class ProjectRepository {
-  ProjectRepository({Directory? overrideDir}) : _overrideDir = overrideDir;
+  ProjectRepository({this._overrideDir});
   final Directory? _overrideDir;
 
   Future<Directory> _dir() async {
-    if (_overrideDir != null) return _overrideDir!;
+    if (_overrideDir != null) return _overrideDir;
     final app = await getApplicationDocumentsDirectory();
     final d = Directory('${app.path}/graceedit_projects');
     if (!await d.exists()) await d.create(recursive: true);
