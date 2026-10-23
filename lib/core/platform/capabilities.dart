@@ -67,4 +67,12 @@ class ExportProfile {
   static List<ExportProfile> supportedBy(DeviceCapabilities caps) => all
       .where((p) => p.width <= caps.maxExportWidth && p.height <= caps.maxExportHeight && p.fps <= caps.maxFps)
       .toList();
+
+  /// Best default for a project canvas: same orientation, and never upscale a
+  /// smaller project (a 720p montage stays 720p unless the user asks).
+  static ExportProfile forCanvas(int width, int height) {
+    if (width == height) return all[3]; // square
+    if (height > width) return all[2]; // portrait
+    return width <= 1280 ? all[0] : all[1]; // landscape 720p / 1080p
+  }
 }

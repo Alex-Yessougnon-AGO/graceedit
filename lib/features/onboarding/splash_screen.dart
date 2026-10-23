@@ -6,6 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/models/grace_project.dart';
+import '../../core/state/providers.dart';
+
 const String _kOnboardingDone = 'graceedit.onboardingDone.v1';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -31,7 +34,57 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       done = false;
     }
     if (!mounted) return;
-    context.go(done ? '/' : '/onboarding');
+    if (!done) {
+      context.go('/onboarding');
+      return;
+    }
+    // Crash recovery: resume the most recently touched project that
+    // still carries a recovery marker instead of silently dropping it.
+    try {
+      final repo = ref.read(projectRepositoryProvider);
+      GraceProject? recovery;
+      for (final p in await repo.listAll()) {
+        if (await repo.hasRecoveryMarker(p.id)) {
+          recovery = p;
+          break;
+        }
+      }
+      if (!mounted) return;
+      if (recovery != null) {
+        final resume = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (c) => AlertDialog(
+            title: const Text('Reprendre le montage ?'),
+            content: Text(
+                '« ${recovery!.name} » n’a pas été fermé proprement. Voulez-vous reprendre où vous en étiez ?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(c, false),
+                child: const Text('Ignorer'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(c, true),
+                child: const Text('Reprendre'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        if (resume == true) {
+          ref.read(editorSessionProvider.notifier).state =
+              EditorSession(recovery);
+          await ref.read(projectsProvider.notifier).refresh();
+          if (!mounted) return;
+          context.go('/editor/${recovery.id}');
+          return;
+        }
+      }
+    } catch (_) {
+      // Fall through to home on any storage error.
+    }
+    if (!mounted) return;
+    context.go('/');
   }
 
   @override

@@ -254,6 +254,11 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.0"
+  flutter_localizations:
+    dependency: "direct main"
+    description: flutter
+    source: sdk
+    version: "0.0.0"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
@@ -497,13 +502,29 @@ packages:
     source: hosted
     version: "6.1.0"
   logging:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: logging
       sha256: c8245ada5f1717ed44271ed1c26b8ce85ca3228fd2ffdb75468ab01979309d61
       url: "https://pub.dev"
     source: hosted
     version: "1.3.0"
+  marionette_flutter:
+    dependency: "direct main"
+    description:
+      name: marionette_flutter
+      sha256: f74b192ddd7e486b026203caa35b5a5d0c515de023e73958ba2035531c0a62bf
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.0"
+  marionette_logging:
+    dependency: "direct main"
+    description:
+      name: marionette_logging
+      sha256: c590377f8badee6eb4c161293e99b8568610b3f151ed3fe1d4b8da58e564e282
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.0"
   matcher:
     dependency: transitive
     description:

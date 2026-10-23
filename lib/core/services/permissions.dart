@@ -5,6 +5,7 @@ library;
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 enum GracePermission { mediaLibrary, camera, microphone }
@@ -23,27 +24,32 @@ class PermissionState {
 }
 
 class PermissionService {
+  /// Web and desktop need no runtime permission prompts (system picker).
+  /// kIsWeb is checked FIRST: dart:io Platform throws on web.
+  static bool get _needsRuntimePrompt =>
+      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
   /// On Android 13+, the system photo picker needs no permission.
   /// This requests full library access for older flows / direct file access.
   Future<bool> requestMediaLibrary() async {
-    if (!Platform.isAndroid && !Platform.isIOS) return true;
+    if (!_needsRuntimePrompt) return true;
     final videos = await Permission.videos.request();
     final photos = await Permission.photos.request();
     return videos.isGranted || photos.isGranted;
   }
 
   Future<bool> requestCamera() async {
-    if (!Platform.isAndroid && !Platform.isIOS) return true;
+    if (!_needsRuntimePrompt) return true;
     return (await Permission.camera.request()).isGranted;
   }
 
   Future<bool> requestMicrophone() async {
-    if (!Platform.isAndroid && !Platform.isIOS) return true;
+    if (!_needsRuntimePrompt) return true;
     return (await Permission.microphone.request()).isGranted;
   }
 
   Future<PermissionState> currentState() async {
-    if (!Platform.isAndroid && !Platform.isIOS) {
+    if (!_needsRuntimePrompt) {
       return const PermissionState(mediaLibrary: true, camera: true, microphone: true);
     }
     final videos = await Permission.videos.status;

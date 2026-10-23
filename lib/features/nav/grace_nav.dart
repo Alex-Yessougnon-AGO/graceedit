@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/l10n/strings.dart';
 import '../../core/models/grace_project.dart';
 import '../../core/state/providers.dart';
 import '../../theme/tokens.dart';
@@ -41,13 +42,13 @@ class GraceNav extends ConsumerWidget {
               backgroundColor: g.primary,
               foregroundColor: g.onPrimary,
               tooltip: 'Créer',
-              onPressed: () => showCreateSheet(context, ref),
+              onPressed: () => createVideo(context, ref),
               child: const Icon(Icons.add, semanticLabel: 'Créer'),
             ),
           ),
           _Item(
-            icon: Icons.person_outlined, activeIcon: Icons.person,
-            label: 'Profil', selected: index == 3,
+            icon: Icons.settings_outlined, activeIcon: Icons.settings,
+            label: 'Réglages', selected: index == 3,
             onTap: () => context.go('/settings'),
           ),
         ],
@@ -55,36 +56,43 @@ class GraceNav extends ConsumerWidget {
     );
   }
 
-  /// Shared create sheet: video or poster. Used by FAB and create cards.
-  static Future<void> showCreateSheet(BuildContext context, WidgetRef ref) async {
-    final kind = await showModalBottomSheet<ProjectKind>(
+  /// Creates a video project (with a name) and opens the editor. V1 has no
+  /// poster project: offering one would lead to a dead end, so the FAB goes
+  /// straight to the only content type that can really be exported.
+  static Future<void> createVideo(BuildContext context, WidgetRef ref) async {
+    final strings = ref.read(stringsProvider);
+    final controller = TextEditingController(text: strings.newVideo);
+    final name = await showDialog<String>(
       context: context,
-      builder: (c) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.videocam_outlined),
-              title: const Text('Nouvelle vidéo'),
-              onTap: () => Navigator.pop(c, ProjectKind.video),
-            ),
-            ListTile(
-              leading: const Icon(Icons.image_outlined),
-              title: const Text('Nouvelle affiche'),
-              onTap: () => Navigator.pop(c, ProjectKind.poster),
-            ),
-          ],
+      builder: (c) => AlertDialog(
+        title: Text(strings.newVideo),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(hintText: strings.projectNameHint),
+          onSubmitted: (_) => Navigator.pop(c, controller.text.trim()),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: Text(
+                strings.locale == AppLocale.fr ? 'Annuler' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, controller.text.trim()),
+            child: Text(strings.create),
+          ),
+        ],
       ),
     );
-    if (kind == null || !context.mounted) return;
-    final repo = ref.read(projectRepositoryProvider);
-    final name = kind == ProjectKind.video ? 'Nouvelle vidéo' : 'Nouvelle affiche';
-    final p = GraceProject(name: name, kind: kind);
-    await repo.save(p);
-    await ref.read(projectsProvider.notifier).refresh();
+    if (name == null || !context.mounted) return;
+    final cleanName = name.trim().isEmpty ? strings.newVideo : name.trim();
+    final p = await ref
+        .read(projectsProvider.notifier)
+        .create(name: cleanName, kind: ProjectKind.video);
+    if (!context.mounted) return;
     ref.read(editorSessionProvider.notifier).state = EditorSession(p);
-    if (context.mounted) context.push('/editor/${p.id}');
+    context.push('/editor/${p.id}');
   }
 }
 

@@ -11,6 +11,12 @@ import '../../theme/tokens.dart';
 
 const subtitleStyles = ['classic', 'bold', 'outline'];
 
+String _styleLabel(String style) => switch (style) {
+      'bold' => 'Gras',
+      'outline' => 'Contour',
+      _ => 'Classique',
+    };
+
 class SubtitlesScreen extends ConsumerStatefulWidget {
   const SubtitlesScreen({super.key});
   @override
@@ -40,16 +46,22 @@ class _SubtitlesScreenState extends ConsumerState<SubtitlesScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Style',
                     style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(width: 12),
-                Expanded(
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
                   child: SegmentedButton<String>(
                     segments: [
                       for (final s in subtitleStyles)
-                        ButtonSegment(value: s, label: Text(s)),
+                        ButtonSegment(
+                            value: s,
+                            label: Text(_styleLabel(s),
+                                maxLines: 1,
+                                overflow: TextOverflow.visible)),
                     ],
                     selected: {p.subtitleStyle},
                     onSelectionChanged: (sel) {
@@ -57,6 +69,12 @@ class _SubtitlesScreenState extends ConsumerState<SubtitlesScreen> {
                       _persist();
                     },
                   ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Les sous-titres apparaissent en bas de l’image, dans '
+                  'l’aperçu et dans la vidéo exportée.',
+                  style: TextStyle(fontSize: 12, color: g.textSecondary),
                 ),
               ],
             ),
@@ -94,8 +112,24 @@ class _SubtitlesScreenState extends ConsumerState<SubtitlesScreen> {
                           title: Text(cue.text),
                           subtitle: Text(
                               '${_fmt(cue.startMs)} → ${_fmt(cue.endMs)}'),
-                          trailing:
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                key: ValueKey('delete-cue-${cue.id}'),
+                                tooltip: 'Supprimer la réplique',
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.delete_outline,
+                                    size: 20),
+                                onPressed: () {
+                                  setState(() => p.subtitles
+                                      .removeWhere((x) => x.id == cue.id));
+                                  _persist();
+                                },
+                              ),
                               const Icon(Icons.edit_outlined, size: 20),
+                            ],
+                          ),
                           onTap: () => _editCue(p, cue),
                         ),
                       );
@@ -139,32 +173,39 @@ class _SubtitlesScreenState extends ConsumerState<SubtitlesScreen> {
               TextField(
                   controller: textCtrl,
                   autofocus: true,
+                  onChanged: (_) => setD(() {}),
                   decoration:
                       const InputDecoration(hintText: 'Texte affiché')),
               const SizedBox(height: 12),
-              Text('Début : ${start.toStringAsFixed(1)}s'),
+              Text('Début : ${start.toStringAsFixed(1).replaceAll('.', ',')}s'),
               Slider(
                   value: start.clamp(0, maxBound),
                   max: maxBound,
                   divisions: (maxBound * 2).round(),
-                  label: '${start.toStringAsFixed(1)}s',
+                  label: '${start.toStringAsFixed(1).replaceAll('.', ',')}s',
                   onChanged: (v) => setD(() {
                         start = v;
                         if (end < start) end = start + 1;
                       })),
-              Text('Fin : ${end.toStringAsFixed(1)}s'),
+              Text('Fin : ${end.toStringAsFixed(1).replaceAll('.', ',')}s'),
               Slider(
                   value: end.clamp(0, maxBound),
                   max: maxBound,
                   divisions: (maxBound * 2).round(),
-                  label: '${end.toStringAsFixed(1)}s',
+                  label: '${end.toStringAsFixed(1).replaceAll('.', ',')}s',
                   onChanged: (v) => setD(() => end = v)),
             ],
           ),
           actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Annuler'),
+            ),
             FilledButton(
-              onPressed: () => Navigator.pop(c, true),
-              child: const Text('OK'),
+              onPressed: textCtrl.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(c, true),
+              child: Text(existing == null ? 'Ajouter' : 'Enregistrer'),
             ),
           ],
         ),

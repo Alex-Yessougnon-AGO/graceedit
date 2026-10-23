@@ -17,11 +17,11 @@ class Strings {
   String get newPoster => isFr ? 'Nouvelle affiche' : 'New poster';
   String get recentProjects => isFr ? 'Projets récents' : 'Recent projects';
   String get emptyProjects => isFr
-      ? 'Aucun projet pour l’instant.\nCréez votre première vidéo ou affiche.'
-      : 'No projects yet.\nCreate your first video or poster.';
+      ? 'Aucun projet pour l’instant.\nCréez votre première vidéo.'
+      : 'No projects yet.\nCreate your first video.';
   String get create => isFr ? 'Créer' : 'Create';
   String get openEditor => isFr ? 'Ouvrir l’éditeur' : 'Open editor';
-  String get settings => isFr ? 'Paramètres' : 'Settings';
+  String get settings => isFr ? 'Réglages' : 'Settings';
   String get themeMode => isFr ? 'Thème' : 'Theme';
   String get language => isFr ? 'Langue' : 'Language';
   String get system => isFr ? 'Système' : 'System';

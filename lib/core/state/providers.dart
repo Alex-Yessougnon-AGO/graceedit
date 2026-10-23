@@ -7,7 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../commands/commands.dart';
 import '../l10n/strings.dart';
 import '../models/grace_project.dart';
+import '../services/permissions.dart';
 import '../storage/project_repository.dart';
+
+final permissionServiceProvider =
+    Provider<PermissionService>((ref) => PermissionService());
 
 class OwnedAsset {
   const OwnedAsset({required this.projectId, required this.projectName, required this.asset});

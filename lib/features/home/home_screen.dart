@@ -1,6 +1,8 @@
 /// Home screen: recent projects, create entry points.
 library;
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,13 +26,6 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(strings.appName,
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 22)),
-        actions: [
-          IconButton(
-            tooltip: strings.settings,
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
       ),
       bottomNavigationBar: const GraceNav(index: 0),
       body: ListView(
@@ -43,24 +38,13 @@ class HomeScreen extends ConsumerWidget {
           Text(strings.homeSubtitle,
               style: TextStyle(fontSize: 15, color: g.textSecondary)),
           const SizedBox(height: GraceSpacing.l),
-          Row(
-            children: [
-              Expanded(
-                child: _CreateCard(
-                  icon: Icons.videocam_outlined,
-                  label: strings.newVideo,
-                  onTap: () => _create(context, ref, ProjectKind.video),
-                ),
-              ),
-              const SizedBox(width: GraceSpacing.m),
-              Expanded(
-                child: _CreateCard(
-                  icon: Icons.image_outlined,
-                  label: strings.newPoster,
-                  onTap: () => _create(context, ref, ProjectKind.poster),
-                ),
-              ),
-            ],
+          _CreateCard(
+            icon: Icons.add,
+            label: strings.newVideo,
+            subtitle: strings.locale == AppLocale.fr
+                ? 'Importer une vidéo, puis la couper et ajouter du texte'
+                : 'Import a video, then trim it and add text',
+            onTap: () => GraceNav.createVideo(context, ref),
           ),
           const SizedBox(height: GraceSpacing.l),
           Text(strings.recentProjects,
@@ -87,7 +71,11 @@ class HomeScreen extends ConsumerWidget {
               return Column(
                 children: [
                   for (final p in list)
-                    _ProjectTile(project: p, onOpen: () => _open(context, ref, p)),
+                    _ProjectTile(
+                      project: p,
+                      onOpen: () => _open(context, ref, p),
+                      onDelete: () => _deleteProject(context, ref, p),
+                    ),
                 ],
               );
             },
@@ -97,46 +85,63 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _create(BuildContext context, WidgetRef ref, ProjectKind kind) async {
-    final strings = ref.read(stringsProvider);
-    final nameController = TextEditingController(
-        text: kind == ProjectKind.video
-            ? (strings.locale == AppLocale.fr ? 'Nouvelle vidéo' : 'New video')
-            : (strings.locale == AppLocale.fr ? 'Nouvelle affiche' : 'New poster'));
-    final name = await showDialog<String>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(strings.create),
-        content: TextField(
-          controller: nameController,
-          autofocus: true,
-          decoration: InputDecoration(hintText: strings.projectNameHint),
-          onSubmitted: (_) => Navigator.pop(c, nameController.text.trim()),
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(c, nameController.text.trim()),
-            child: Text(strings.create),
-          ),
-        ],
-      ),
-    );
-    if (name == null || name.isEmpty || !context.mounted) return;
-    final p = await ref.read(projectsProvider.notifier).create(name: name, kind: kind);
-    if (!context.mounted) return;
-    _open(context, ref, p);
-  }
-
   void _open(BuildContext context, WidgetRef ref, GraceProject p) {
     ref.read(editorSessionProvider.notifier).state = EditorSession(p);
     context.push('/editor/${p.id}');
   }
+
+  Future<void> _deleteProject(
+      BuildContext context, WidgetRef ref, GraceProject p) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Supprimer ce projet ?'),
+        content: Text('« ${p.name} » sera retiré de la liste. '
+            'Cette action est définitive.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Garder')),
+          FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Supprimer')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    // Never delete a media file another project still uses.
+    final all = ref.read(projectsProvider).value ?? const <GraceProject>[];
+    final stillUsed = <String>{};
+    for (final other in all) {
+      if (other.id == p.id) continue;
+      for (final a in other.assets) {
+        stillUsed.add(a.path);
+      }
+    }
+    await ref.read(projectsProvider.notifier).remove(p.id);
+    for (final a in p.assets) {
+      await ref.read(thumbnailServiceProvider).invalidateAsset(a.id);
+      if (stillUsed.contains(a.path)) continue;
+      try {
+        final f = File(a.path);
+        if (await f.exists()) await f.delete();
+      } catch (_) {
+        // A locked or already-deleted file is not worth an error dialog.
+      }
+    }
+  }
 }
 
 class _CreateCard extends StatelessWidget {
-  const _CreateCard({required this.icon, required this.label, required this.onTap});
+  const _CreateCard({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.subtitle,
+  });
   final IconData icon;
   final String label;
+  final String? subtitle;
   final VoidCallback onTap;
 
   @override
@@ -154,14 +159,37 @@ class _CreateCard extends StatelessWidget {
             border: Border.all(color: g.border),
             borderRadius: BorderRadius.circular(GraceRadius.l),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Icon(icon, size: 40, color: g.primary, semanticLabel: label),
-              const SizedBox(height: GraceSpacing.s),
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600, color: g.textPrimary)),
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: g.primary,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, size: 26, color: g.onPrimary),
+              ),
+              const SizedBox(width: GraceSpacing.m),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: g.textPrimary)),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(subtitle!,
+                          style: TextStyle(
+                              fontSize: 13, color: g.textSecondary)),
+                    ],
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: g.textSecondary),
             ],
           ),
         ),
@@ -171,9 +199,14 @@ class _CreateCard extends StatelessWidget {
 }
 
 class _ProjectTile extends StatelessWidget {
-  const _ProjectTile({required this.project, required this.onOpen});
+  const _ProjectTile({
+    required this.project,
+    required this.onOpen,
+    required this.onDelete,
+  });
   final GraceProject project;
   final VoidCallback onOpen;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -234,14 +267,33 @@ class _ProjectTile extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       project.clips.isEmpty
-                          ? '${project.canvas.width}×${project.canvas.height} · ${project.kind.name}'
-                          : '${project.clips.length} clips · ${project.formatDuration()}',
+                          ? '${project.canvas.width}×${project.canvas.height} · '
+                              '${project.kind == ProjectKind.video ? 'Vidéo' : 'Affiche'}'
+                          : '${project.clips.length} ${project.clips.length > 1 ? 'parties' : 'partie'} · ${project.formatDuration()}',
                       style: TextStyle(color: g.textSecondary, fontSize: 12),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: g.textSecondary),
+              PopupMenuButton<String>(
+                tooltip: 'Options du projet',
+                icon: Icon(Icons.more_vert, color: g.textSecondary),
+                onSelected: (v) {
+                  if (v == 'delete') onDelete();
+                },
+                itemBuilder: (c) => const [
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, size: 20),
+                        SizedBox(width: 8),
+                        Text('Supprimer le projet'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),

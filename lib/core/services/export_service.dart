@@ -30,6 +30,10 @@ class ExportService {
   /// Output file of the last started export (null if none).
   String? lastOutputPath;
 
+  /// Job id of the currently running native export (null if none).
+  /// Used by the UI to really cancel the native job.
+  String? currentJobId;
+
   /// Builds the render plan from the project and runs it natively.
   /// Emits progress 0..1. Throws on validation or native error.
   Stream<NativeExportStatus> export({
@@ -67,18 +71,43 @@ class ExportService {
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory('${docs.path}/graceedit_exports');
     if (!await dir.exists()) await dir.create(recursive: true);
-    final outPath =
-        '${dir.path}/${project.id}_${profile.id.name}_${DateTime.now().millisecondsSinceEpoch}.mp4';
+    // A readable file name the user can recognise in the share sheet —
+    // never a raw project UUID.
+    final safeName = project.name
+        .replaceAll(RegExp(r'[/\\:*?"<>|]'), '')
+        .trim()
+        .replaceAll(RegExp(r'\s+'), '_');
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final stamp =
+        '${now.year}${two(now.month)}${two(now.day)}_${two(now.hour)}${two(now.minute)}';
+    final base = safeName.isEmpty ? 'video' : safeName;
+    var outPath = '${dir.path}/${base}_$stamp.mp4';
+    var n = 2;
+    while (File(outPath).existsSync()) {
+      outPath = '${dir.path}/${base}_${stamp}_$n.mp4';
+      n++;
+    }
     lastOutputPath = outPath;
 
     late final String jobId;
     try {
       jobId = await _channel.invokeMethod<String>('startExport', {
         'clips': clips,
+        'texts': project.texts.map((t) => t.text).toList(),
+        'subtitles': project.subtitles
+            .map((s) => {
+                  'startMs': s.startMs,
+                  'endMs': s.endMs,
+                  'text': s.text,
+                })
+            .toList(),
+        'subtitleStyle': project.subtitleStyle,
         'width': profile.width,
         'height': profile.height,
         'outPath': outPath,
       }) ?? (throw StateError('Le moteur d’export n’a pas répondu.'));
+      currentJobId = jobId;
     } on MissingPluginException {
       throw StateError('Export natif indisponible sur cette plateforme.');
     }
@@ -97,7 +126,10 @@ class ExportService {
       final progress = ((map['progress'] ?? 0) as num).toDouble().clamp(0.0, 1.0);
       yield NativeExportStatus(
           state: state, progress: progress, error: map['error'] as String?);
-      if (state != NativeExportState.running) return;
+      if (state != NativeExportState.running) {
+        if (currentJobId == jobId) currentJobId = null;
+        return;
+      }
     }
   }
 
@@ -108,6 +140,20 @@ class ExportService {
           false;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Copies the finished file into the phone gallery (Movies/GraceEdit).
+  /// Returns the MediaStore URI, or null when saving is not available.
+  Future<String?> saveToGallery(String path) async {
+    try {
+      return await _channel.invokeMethod<String>('saveToGallery', {
+        'path': path,
+      });
+    } on MissingPluginException {
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 }

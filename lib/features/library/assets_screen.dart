@@ -3,9 +3,10 @@
 /// Search, preview, delete (with thumbnail invalidation).
 library;
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/models/grace_project.dart';
 import '../../core/state/providers.dart';
@@ -21,17 +22,27 @@ class AssetsScreen extends ConsumerStatefulWidget {
 
 class _AssetsScreenState extends ConsumerState<AssetsScreen> {
   String _query = '';
+  bool _showAll = false;
 
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(editorSessionProvider);
     final g = context.grace;
-    if (session != null) {
-      return _buildSessionView(session.project, isGlobal: false);
+    if (session != null && !_showAll) {
+      return _buildSessionView(session.project);
     }
     final all = ref.watch(allAssetsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Bibliothèque')),
+      appBar: AppBar(
+        title: const Text('Bibliothèque'),
+        actions: [
+          if (session != null)
+            TextButton(
+              onPressed: () => setState(() => _showAll = false),
+              child: const Text('Mon projet'),
+            ),
+        ],
+      ),
       bottomNavigationBar: const GraceNav(index: 1),
       body: Column(
         children: [
@@ -58,7 +69,7 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
                     .toList();
                 if (shown.isEmpty) {
                   return Center(
-                      child: Text('Aucun média importé.',
+                      child: Text('Aucune vidéo importée.',
                           style: TextStyle(color: g.textSecondary)));
                 }
                 return GridView.builder(
@@ -81,7 +92,7 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
     );
   }
 
-  Widget _buildSessionView(GraceProject project, {required bool isGlobal}) {
+  Widget _buildSessionView(GraceProject project) {
     final g = context.grace;
     final assets = project.assets
         .where((a) => _query.isEmpty || a.path.toLowerCase().contains(_query.toLowerCase()))
@@ -108,10 +119,7 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
                   style: const TextStyle(fontWeight: FontWeight.w600)),
               const Spacer(),
               TextButton(
-                onPressed: () {
-                  ref.read(editorSessionProvider.notifier).state = null;
-                  setState(() {});
-                },
+                onPressed: () => setState(() => _showAll = true),
                 child: const Text('Voir tout'),
               ),
             ]),
@@ -119,7 +127,7 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
           Expanded(
             child: assets.isEmpty
                 ? Center(
-                    child: Text('Aucun média importé.',
+                    child: Text('Aucune vidéo importée.',
                         style: TextStyle(color: g.textSecondary)))
                 : GridView.builder(
                     padding: const EdgeInsets.all(GraceSpacing.m),
@@ -130,7 +138,7 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
                     itemCount: assets.length,
                     itemBuilder: (c, i) => _Tile(
                       asset: assets[i],
-                      footnote: assets[i].kind.name,
+                      footnote: _kindLabel(assets[i].kind),
                       onDelete: () => _deleteSession(assets[i]),
                     ),
                   ),
@@ -141,9 +149,18 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
   }
 
   Future<void> _deleteSession(MediaAsset a) async {
-    if (!await _confirm(a.path.split('/').last)) return;
     final session = ref.read(editorSessionProvider);
     if (session == null) return;
+    final used =
+        session.project.clips.where((cl) => cl.assetId == a.id).length;
+    if (!await _confirm(
+      a.path.split('/').last,
+      extra: used == 0
+          ? null
+          : 'Utilisé $used fois dans la vidéo : il sera aussi retiré.',
+    )) {
+      return;
+    }
     setState(() {
       session.project.assets.removeWhere((x) => x.id == a.id);
       session.project.clips.removeWhere((cl) => cl.assetId == a.id);
@@ -151,31 +168,63 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
     });
     await ref.read(thumbnailServiceProvider).invalidateAsset(a.id);
     await ref.read(projectRepositoryProvider).save(session.project);
+    await _deleteFileIfUnused(a.path);
     ref.invalidate(allAssetsProvider);
   }
 
   Future<void> _deleteGlobal(OwnedAsset o) async {
-    if (!await _confirm('${o.asset.path.split('/').last}\n(${o.projectName})')) {
-      return;
-    }
     final repo = ref.read(projectRepositoryProvider);
     final project = await repo.load(o.projectId);
     if (project == null) return;
+    final used = project.clips.where((cl) => cl.assetId == o.asset.id).length;
+    if (!await _confirm(
+      '${o.asset.path.split('/').last}\n(${o.projectName})',
+      extra: used == 0
+          ? null
+          : 'Utilisé $used fois dans la vidéo : il sera aussi retiré.',
+    )) {
+      return;
+    }
     project.assets.removeWhere((x) => x.id == o.asset.id);
     project.clips.removeWhere((cl) => cl.assetId == o.asset.id);
     project.touch();
     await repo.save(project);
     await ref.read(thumbnailServiceProvider).invalidateAsset(o.asset.id);
+    await _deleteFileIfUnused(o.asset.path);
     await ref.read(projectsProvider.notifier).refresh();
     ref.invalidate(allAssetsProvider);
   }
 
-  Future<bool> _confirm(String label) async {
+  /// Remove the copied media file once no project references it any more.
+  Future<void> _deleteFileIfUnused(String path) async {
+    final all = await ref.read(projectRepositoryProvider).listAll();
+    for (final p in all) {
+      if (p.assets.any((x) => x.path == path)) return;
+    }
+    try {
+      final f = File(path);
+      if (await f.exists()) await f.delete();
+    } catch (_) {
+      // A locked or already-deleted file is not worth an error dialog.
+    }
+  }
+
+  Future<bool> _confirm(String label, {String? extra}) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Supprimer cet asset ?'),
-        content: Text(label),
+        title: const Text('Supprimer ce fichier ?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label),
+            if (extra != null) ...[
+              const SizedBox(height: 8),
+              Text(extra, style: const TextStyle(fontSize: 13)),
+            ],
+          ],
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(c, false),
@@ -188,6 +237,15 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
     );
     return ok == true;
   }
+
+  /// Plain French label for the kind badge — never the enum name.
+  static String _kindLabel(MediaKind kind) => switch (kind) {
+        MediaKind.video => 'Vidéo',
+        MediaKind.image => 'Photo',
+        MediaKind.audio => 'Audio',
+        MediaKind.text => 'Texte',
+        MediaKind.subtitle => 'Sous-titre',
+      };
 }
 
 class _Tile extends StatelessWidget {
@@ -217,6 +275,24 @@ class _Tile extends StatelessWidget {
               ),
               child: Text(footnote,
                   style: const TextStyle(color: Colors.white, fontSize: 11)),
+            ),
+          ),
+          // Visible delete affordance: long-press alone is invisible to a
+          // beginner.
+          Positioned(
+            top: 2, right: 2,
+            child: Material(
+              color: Colors.black54,
+              shape: const CircleBorder(),
+              child: InkWell(
+                onTap: onDelete,
+                customBorder: const CircleBorder(),
+                child: const Padding(
+                  padding: EdgeInsets.all(5),
+                  child: Icon(Icons.delete_outline,
+                      size: 16, color: Colors.white),
+                ),
+              ),
             ),
           ),
         ],

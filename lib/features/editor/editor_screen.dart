@@ -18,7 +18,6 @@ import '../../core/services/thumbnails.dart';
 import '../../core/state/providers.dart';
 import '../../theme/tokens.dart';
 import '../library/thumb_widget.dart';
-import 'subtitles_screen.dart';
 
 /// Builds a 4x5 color matrix for brightness/contrast/saturation adjustments.
 /// brightness: -1..1, contrast/saturation: multipliers around 1.
@@ -52,8 +51,58 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   bool _saving = false;
   bool _importing = false;
   String? _notice;
-  ExportProfile _profile = ExportProfile.all[1];
+  ExportProfile? _profile;
   int? _selectedClipIndex;
+  bool _booting = true;
+  String? _bootError;
+
+  /// The clip the tools act on. Falls back to the first clip so actions and the
+  /// preview keep working right after an import without an extra tap.
+  int? get _activeClipIndex {
+    final session = ref.read(editorSessionProvider);
+    if (session == null || session.project.clips.isEmpty) return null;
+    final i = _selectedClipIndex;
+    if (i == null || i < 0 || i >= session.project.clips.length) return 0;
+    return i;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _ensureSession();
+  }
+
+  /// Reload the project from disk when the in-memory session is missing
+  /// or targets another project (relaunch, deep link). Undo history
+  /// restarts fresh — persisted content is authoritative.
+  Future<void> _ensureSession() async {
+    final current = ref.read(editorSessionProvider);
+    if (current != null && current.project.id == widget.projectId) {
+      if (mounted) setState(() => _booting = false);
+      return;
+    }
+    try {
+      final loaded =
+          await ref.read(projectRepositoryProvider).load(widget.projectId);
+      if (!mounted) return;
+      if (loaded == null) {
+        setState(() {
+          _booting = false;
+          _bootError = 'Projet introuvable — il a peut-être été supprimé.';
+        });
+        return;
+      }
+      ref.read(editorSessionProvider.notifier).state = EditorSession(loaded);
+      setState(() => _booting = false);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _booting = false;
+          _bootError = 'Ouverture impossible — stockage illisible.';
+        });
+      }
+    }
+  }
 
   EditorSession? get _session => ref.watch(editorSessionProvider);
 
@@ -63,6 +112,9 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     setState(() => _saving = true);
     try {
       await ref.read(projectRepositoryProvider).save(s.project);
+      await ref
+          .read(thumbnailServiceProvider)
+          .invalidateAsset('project-${s.project.id}');
       await ref.read(projectsProvider.notifier).refresh();
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -94,21 +146,37 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
               title: const Text('Filmer une vidéo'),
               onTap: () => Navigator.pop(c, 'video_camera'),
             ),
+            const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Photo de la galerie'),
-              onTap: () => Navigator.pop(c, 'image_gallery'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Prendre une photo'),
-              onTap: () => Navigator.pop(c, 'image_camera'),
+              leading: const Icon(Icons.perm_media_outlined),
+              title: const Text('Mes vidéos importées'),
+              subtitle: const Text('Voir et ranger les fichiers du téléphone'),
+              onTap: () => Navigator.pop(c, 'library'),
             ),
           ],
         ),
       ),
     );
     if (choice == null) return;
+    if (choice == 'library') {
+      if (mounted) context.push('/assets');
+      return;
+    }
+    // Ask for the camera only when the user actually films — asking up front
+    // for a library permission the system picker does not need is scary and
+    // pointless.
+    if (choice == 'video_camera' || choice == 'image_camera') {
+      final allowed =
+          await ref.read(permissionServiceProvider).requestCamera();
+      if (!allowed) {
+        if (mounted) {
+          setState(() => _notice =
+              'Autorisez la caméra dans les réglages pour filmer depuis '
+              'GraceEdit.');
+        }
+        return;
+      }
+    }
     final svc = ref.read(importServiceProvider);
     setState(() { _importing = true; _notice = null; });
     try {
@@ -118,10 +186,6 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
           result = await svc.pickVideo(source: ImportSource.gallery);
         case 'video_camera':
           result = await svc.pickVideo(source: ImportSource.camera);
-        case 'image_gallery':
-          result = await svc.pickImage(source: ImportSource.gallery);
-        case 'image_camera':
-          result = await svc.pickImage(source: ImportSource.camera);
       }
       if (result == null) return; // cancelled
       if (!await ImportService.isReadable(result.asset.path)) {
@@ -133,30 +197,47 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       final s = ref.read(editorSessionProvider);
       if (s == null) return;
       var asset = result.asset;
-      // Probe real video duration when possible.
+      // Probe the real video duration + dimensions.
       if (asset.kind == MediaKind.video) {
-        final ms = await _probeVideoMs(asset.path);
-        if (ms != null && ms > 0) {
+        final info = await _probeVideo(asset.path);
+        if (info != null) {
           asset = MediaAsset(
             id: asset.id, kind: asset.kind, path: asset.path,
-            durationMs: ms, source: asset.source,
+            durationMs: info.durationMs,
+            width: info.width, height: info.height,
+            source: asset.source,
           );
+        }
+        // First clip: match the project canvas to the video instead of forcing
+        // a portrait frame with huge black bars around a landscape clip.
+        if (s.project.clips.isEmpty &&
+            info != null &&
+            info.width > 0 &&
+            info.height > 0) {
+          // Keep projects light: cap the long side at 1920.
+          var w = info.width;
+          var h = info.height;
+          final longSide = w > h ? w : h;
+          if (longSide > 1920) {
+            final ratio = 1920 / longSide;
+            w = (w * ratio).round();
+            h = (h * ratio).round();
+          }
+          w = (w ~/ 2) * 2;
+          h = (h ~/ 2) * 2;
+          s.project.canvas = CanvasSettings(width: w, height: h, fps: 30);
+          _notice = 'Format du projet adapté à votre vidéo : $w×$h.';
         }
       }
       setState(() => s.project.assets.add(asset));
-      if (asset.kind == MediaKind.video) {
-        final end = asset.durationMs ?? 5000;
-        _exec(AddClipCommand(VideoClip(
-          id: GraceProject.newId(), assetId: asset.id,
-          startMs: 0, endMs: end,
-        )));
-      } else {
-        // Photo => 3s still clip backed by the image.
-        _exec(AddClipCommand(VideoClip(
-          id: GraceProject.newId(), assetId: asset.id,
-          startMs: 0, endMs: 3000,
-        )));
-      }
+      final end = asset.durationMs ?? 5000;
+      _exec(AddClipCommand(VideoClip(
+        id: GraceProject.newId(), assetId: asset.id,
+        startMs: 0, endMs: end,
+      )));
+      // Select the clip we just added so the preview and the tools act on it
+      // immediately — no extra tap for a beginner.
+      setState(() => _selectedClipIndex = s.project.clips.length - 1);
     } on Exception catch (e) {
       if (mounted) setState(() => _notice = 'Import impossible : $e');
     } finally {
@@ -164,13 +245,20 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     }
   }
 
-  Future<int?> _probeVideoMs(String path) async {
+  Future<({int durationMs, int width, int height})?> _probeVideo(
+      String path) async {
     try {
       final c = VideoPlayerController.file(File(path));
       await c.initialize();
       final ms = c.value.duration.inMilliseconds;
+      final size = c.value.size;
       await c.dispose();
-      return ms > 0 ? ms : null;
+      if (ms <= 0) return null;
+      return (
+        durationMs: ms,
+        width: size.width.round(),
+        height: size.height.round(),
+      );
     } catch (_) {
       return null;
     }
@@ -181,17 +269,67 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     final s = _session;
     final strings = ref.watch(stringsProvider);
     final g = context.grace;
-    if (s == null) {
+    if (_booting) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (s == null && _bootError == null) {
+      // The session can disappear while the editor stays mounted (e.g. the
+      // library's "Voir tout"). Reload it instead of showing a dead screen.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _booting) return;
+        setState(() => _booting = true);
+        _ensureSession();
+      });
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_bootError != null) {
       return Scaffold(
         appBar: AppBar(),
-        body: Center(child: Text(strings.errorGeneric)),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_bootError ?? strings.errorGeneric,
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _booting = true;
+                      _bootError = null;
+                    });
+                    _ensureSession();
+                  },
+                  icon: const Icon(Icons.refresh_outlined),
+                  label: const Text('Réessayer'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
+    }
+    if (s == null) {
+      return const Scaffold(body: SizedBox.shrink());
     }
     final p = s.project;
     final profiles = ExportProfile.supportedBy(DeviceCapabilities.fallback);
+    final canvasProfile = ExportProfile.forCanvas(p.canvas.width, p.canvas.height);
+    final activeProfile = (_profile != null && profiles.contains(_profile))
+        ? _profile!
+        : (profiles.contains(canvasProfile) ? canvasProfile : profiles.first);
+    // A clip is always "active": if the user never tapped one, the first clip
+    // is selected so the preview shows the video they just imported.
+    final int? activeIndex = _activeClipIndex;
     VideoClip? selected;
-    if (_selectedClipIndex != null && _selectedClipIndex! < p.clips.length) {
-      selected = p.clips[_selectedClipIndex!];
+    if (activeIndex != null) {
+      selected = p.clips[activeIndex];
     }
     MediaAsset? selectedAsset;
     if (selected != null) {
@@ -210,7 +348,12 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
             if (context.mounted) context.pop();
           },
         ),
-        title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+        title: Text(
+          p.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
         actions: [
           if (_saving)
             const Padding(
@@ -229,11 +372,6 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
             onPressed: () => context.push('/subtitles'),
           ),
           IconButton(
-            tooltip: 'Bibliothèque',
-            icon: const Icon(Icons.photo_library_outlined),
-            onPressed: () => context.push('/assets'),
-          ),
-          IconButton(
             tooltip: strings.undo,
             icon: const Icon(Icons.undo),
             onPressed: s.commands.canUndo
@@ -247,29 +385,76 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                 ? () { setState(() => s.commands.redo(p)); _persist(); }
                 : null,
           ),
+          const SizedBox(width: 4),
         ],
       ),
-      body: Column(
+      body: _importing
+          ? const _ImportOverlay()
+          : Column(
         children: [
           if (_notice != null)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: g.elevated,
-              child: Text(_notice!,
-                  style: TextStyle(color: g.textSecondary, fontSize: 13)),
-            ),
-          // Preview area: real video playback when a video clip is selected.
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.all(GraceSpacing.m),
-              decoration: BoxDecoration(
-                color: Colors.black,
-                border: Border.all(color: g.border),
-                borderRadius: BorderRadius.circular(GraceRadius.l),
+              padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(_notice!,
+                        style: TextStyle(
+                            color: g.textSecondary, fontSize: 13)),
+                  ),
+                  IconButton(
+                    tooltip: 'Fermer',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(Icons.close, size: 18, color: g.textSecondary),
+                    onPressed: () => setState(() => _notice = null),
+                  ),
+                ],
               ),
-              clipBehavior: Clip.antiAlias,
-              child: _buildPreview(p, selected, selectedAsset, g),
+            ),
+          // Preview area: fitted to the real canvas ratio so what you see is
+          // exactly what gets exported (no misleading black bars).
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(GraceSpacing.m),
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: p.canvas.width / p.canvas.height,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: p.clips.isEmpty ? g.elevated : Colors.black,
+                      border: Border.all(color: g.border),
+                      borderRadius: BorderRadius.circular(GraceRadius.l),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        _buildPreview(p, selected, selectedAsset, g),
+                        if (p.clips.length > 1 && activeIndex != null)
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                'Partie ${activeIndex + 1} sur ${p.clips.length}',
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 11),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
           // Timeline with real thumbnails.
@@ -278,22 +463,56 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
             padding: const EdgeInsets.symmetric(horizontal: GraceSpacing.m),
             child: p.clips.isEmpty
                 ? Center(
-                    child: Text(strings.timeline,
-                        style: TextStyle(color: g.textSecondary)))
+                    child: OutlinedButton.icon(
+                      onPressed: _importing ? null : _importMenu,
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      label: const Text('Importer une vidéo'),
+                    ),
+                  )
                 : ReorderableListView.builder(
                     scrollDirection: Axis.horizontal,
-                    itemCount: p.clips.length,
-                    onReorder: (oldI, newI) {
-                      if (newI > oldI) newI -= 1;
-                      _exec(MoveClipCommand(p.clips[oldI].id, newI));
+                    itemCount: p.clips.length + 1,
+                    onReorderItem: (oldI, newI) {
+                      if (oldI >= p.clips.length) return;
+                      final target = newI.clamp(0, p.clips.length - 1);
+                      _exec(MoveClipCommand(p.clips[oldI].id, target));
                     },
                     itemBuilder: (c, i) {
+                      if (i == p.clips.length) {
+                        // Always-visible "add" tile: a beginner must never
+                        // wonder how to put a second clip on the timeline.
+                        return GestureDetector(
+                          key: const ValueKey('timeline_add'),
+                          onTap: _importing ? null : _importMenu,
+                          child: Container(
+                            width: 76,
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(
+                              color: g.elevated,
+                              border: Border.all(color: g.border),
+                              borderRadius:
+                                  BorderRadius.circular(GraceRadius.m),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add, color: g.textSecondary),
+                                const SizedBox(height: 4),
+                                Text('Ajouter',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: g.textSecondary)),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
                       final clip = p.clips[i];
                       MediaAsset? asset;
                       for (final a in p.assets) {
                         if (a.id == clip.assetId) asset = a;
                       }
-                      final sel = _selectedClipIndex == i;
+                      final sel = activeIndex == i;
                       return GestureDetector(
                         key: ValueKey(clip.id),
                         onTap: () => setState(() => _selectedClipIndex = i),
@@ -329,7 +548,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                               Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 4),
                                 child: Text(
-                                  '${(clip.durationMs / 1000).toStringAsFixed(1)}s · ×${clip.speed}',
+                                  '${(clip.durationMs / 1000).toStringAsFixed(1).replaceAll('.', ',')}s · ×${clip.speed.toStringAsFixed(1).replaceAll('.', ',')}',
                                   style: const TextStyle(fontSize: 12),
                                 ),
                               ),
@@ -340,11 +559,13 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                     },
                   ),
           ),
-          // Contextual actions.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.all(GraceSpacing.m),
-            child: Row(
+          // Tool grid: every action visible at once, no hidden swipe.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                GraceSpacing.m, 0, GraceSpacing.m, GraceSpacing.s),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
               children: [
                 _Action(
                   icon: Icons.add_photo_alternate_outlined,
@@ -359,6 +580,12 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                       final mid =
                           (clip.startMs + clip.endMs) ~/ 2;
                       _exec(SplitClipCommand(clip.id, mid));
+                      ScaffoldMessenger.of(context)
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(const SnackBar(
+                          content: Text('Vidéo coupée en deux.'),
+                          duration: Duration(seconds: 2),
+                        ));
                     }),
                 _Action(
                     icon: Icons.crop_outlined, label: strings.trim,
@@ -389,68 +616,54 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                     }),
                 _Action(
                     icon: Icons.text_fields, label: strings.addText,
-                    onTap: () async {
-                      final controller = TextEditingController();
-                      final text = await showDialog<String>(
-                        context: context,
-                        builder: (c) => AlertDialog(
-                          title: Text(strings.addText),
-                          content: TextField(
-                              controller: controller, autofocus: true),
-                          actions: [
-                            FilledButton(
-                              onPressed: () => Navigator.pop(
-                                  c, controller.text.trim()),
-                              child: Text(strings.save),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (text != null && text.isNotEmpty) {
-                        setState(() => p.texts.add(TextLayer(
-                            id: GraceProject.newId(), text: text)));
-                        _persist();
-                      }
-                    }),
+                    onTap: _textSheet),
               ],
             ),
           ),
-          // Export bar.
+          // Export bar. The SafeArea keeps the controls above the system
+          // navigation bar (gesture or 3-button) while the surface still
+          // runs to the bottom edge.
           Container(
-            padding: const EdgeInsets.fromLTRB(
-                GraceSpacing.m, GraceSpacing.s, GraceSpacing.m, GraceSpacing.m),
             decoration: BoxDecoration(
               color: g.surface,
               border: Border(top: BorderSide(color: g.border)),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<ExportProfile>(
-                    initialValue: profiles.contains(_profile)
-                        ? _profile
-                        : profiles.first,
-                    decoration: const InputDecoration(
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8)),
-                    items: [
-                      for (final pr in profiles)
-                        DropdownMenuItem(value: pr, child: Text(pr.label)),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setState(() => _profile = v);
-                    },
-                  ),
+            child: SafeArea(
+              top: false,
+              minimum: const EdgeInsets.only(bottom: GraceSpacing.m),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    GraceSpacing.m, GraceSpacing.s, GraceSpacing.m, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<ExportProfile>(
+                        initialValue: activeProfile,
+                        decoration: const InputDecoration(
+                            labelText: 'Qualité',
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8)),
+                        items: [
+                          for (final pr in profiles)
+                            DropdownMenuItem(value: pr, child: Text(pr.label)),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) setState(() => _profile = v);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: GraceSpacing.m),
+                    FilledButton.icon(
+                      onPressed: p.clips.isEmpty
+                          ? null
+                          : () => context.push('/export/${p.id}',
+                              extra: activeProfile),
+                      icon: const Icon(Icons.save_alt),
+                      label: Text(strings.export),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: GraceSpacing.m),
-                FilledButton.icon(
-                  onPressed: p.clips.isEmpty
-                      ? null
-                      : () => context.push('/export/${p.id}', extra: _profile),
-                  icon: const Icon(Icons.ios_share),
-                  label: Text(strings.export),
-                ),
-              ],
+              ),
             ),
           ),
         ],
@@ -460,7 +673,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
 
   Future<void> _trimSheet() async {
     final s = ref.read(editorSessionProvider);
-    final idx = _selectedClipIndex;
+    final idx = _activeClipIndex;
     if (s == null || idx == null || idx >= s.project.clips.length) return;
     final clip = s.project.clips[idx];
     MediaAsset? asset;
@@ -473,43 +686,94 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     final ok = await showModalBottomSheet<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, setB) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Rogner : ${(start / 1000).toStringAsFixed(1)}s → ${(end / 1000).toStringAsFixed(1)}s',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                RangeSlider(
-                  values: RangeValues(start, end),
-                  max: maxMs,
-                  divisions: maxMs.round().clamp(1, 600),
-                  labels: RangeLabels(
-                    '${(start / 1000).toStringAsFixed(1)}s',
-                    '${(end / 1000).toStringAsFixed(1)}s',
+        builder: (c, setB) {
+          final tooShort = end - start < 500;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('Couper le clip',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text('Gardez seulement la partie que vous voulez.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: context.grace.textSecondary)),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ValueBox(
+                            label: 'Début',
+                            value: '${(start / 1000).toStringAsFixed(1).replaceAll('.', ',')} s'),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _ValueBox(
+                            label: 'Fin',
+                            value: '${(end / 1000).toStringAsFixed(1).replaceAll('.', ',')} s'),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _ValueBox(
+                            label: 'Durée',
+                            value:
+                                '${((end - start) / 1000).toStringAsFixed(1).replaceAll('.', ',')} s',
+                            strong: true),
+                      ),
+                    ],
                   ),
-                  onChanged: (v) => setB(() {
-                    start = v.start;
-                    end = v.end;
-                  }),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: end - start >= 500
-                        ? () => Navigator.pop(c, true)
-                        : null,
-                    child: const Text('Appliquer (min 0,5s)'),
+                  RangeSlider(
+                    values: RangeValues(start, end),
+                    max: maxMs,
+                    min: 0,
+                    divisions: (maxMs / 100).round().clamp(1, 600),
+                    labels: RangeLabels(
+                      '${(start / 1000).toStringAsFixed(1).replaceAll('.', ',')}s',
+                      '${(end / 1000).toStringAsFixed(1).replaceAll('.', ',')}s',
+                    ),
+                    onChanged: (v) => setB(() {
+                      start = v.start;
+                      end = v.end;
+                    }),
                   ),
-                ),
-              ],
+                  if (tooShort)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text('Il faut au moins 0,5 seconde.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: context.grace.destructive)),
+                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(c, false),
+                          child: const Text('Annuler'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: FilledButton(
+                          onPressed:
+                              tooShort ? null : () => Navigator.pop(c, true),
+                          child: Text(tooShort ? 'Trop court' : 'Couper'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
     if (ok == true) {
@@ -518,9 +782,28 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     }
   }
 
+  /// Text layers are shown on every clip and baked into the exported file —
+  /// no "fake" text tool that only decorates the project JSON.
+  Future<void> _textSheet() async {
+    final s = ref.read(editorSessionProvider);
+    if (s == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (c) => _TextSheet(
+        project: s.project,
+        onChanged: () {
+          if (!mounted) return;
+          setState(() {});
+          _persist();
+        },
+      ),
+    );
+  }
+
   Future<void> _speedVolumeSheet() async {
     final s = ref.read(editorSessionProvider);
-    final idx = _selectedClipIndex;
+    final idx = _activeClipIndex;
     if (s == null || idx == null || idx >= s.project.clips.length) return;
     final clip = s.project.clips[idx];
     var speed = clip.speed;
@@ -534,11 +817,13 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Vitesse : ×${speed.toStringAsFixed(2)}',
+                Text('Vitesse : ×${speed.toStringAsFixed(2).replaceAll('.', ',')}',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
+                const Text('Visible dans l’aperçu, pas encore enregistré dans le fichier.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey)),
                 Slider(
                     value: speed, min: 0.5, max: 2.0, divisions: 6,
-                    label: '×${speed.toStringAsFixed(2)}',
+                    label: '×${speed.toStringAsFixed(2).replaceAll('.', ',')}',
                     onChanged: (v) => setB(() => speed = v)),
                 Text('Volume : ${(volume * 100).round()} %',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -567,7 +852,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
 
   Future<void> _filterSheet() async {
     final s = ref.read(editorSessionProvider);
-    final idx = _selectedClipIndex;
+    final idx = _activeClipIndex;
     if (s == null || idx == null || idx >= s.project.clips.length) return;
     final clip = s.project.clips[idx];
     var brightness = clip.brightness;
@@ -582,17 +867,19 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Luminosité : ${brightness.toStringAsFixed(2)}',
+                Text('Luminosité : ${brightness.toStringAsFixed(2).replaceAll('.', ',')}',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
+                const Text('Visible dans l’aperçu, pas encore enregistré dans le fichier.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey)),
                 Slider(
                     value: brightness, min: -0.5, max: 0.5, divisions: 20,
                     onChanged: (v) => setB(() => brightness = v)),
-                Text('Contraste : ${contrast.toStringAsFixed(2)}',
+                Text('Contraste : ${contrast.toStringAsFixed(2).replaceAll('.', ',')}',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
                 Slider(
                     value: contrast, min: 0.5, max: 1.5, divisions: 20,
                     onChanged: (v) => setB(() => contrast = v)),
-                Text('Saturation : ${saturation.toStringAsFixed(2)}',
+                Text('Saturation : ${saturation.toStringAsFixed(2).replaceAll('.', ',')}',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
                 Slider(
                     value: saturation, min: 0.0, max: 2.0, divisions: 20,
@@ -651,32 +938,95 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       return out;
     }
 
+    // Text layers are composited over the frame exactly where the export puts
+    // them (bottom centre), so the preview never lies about the result.
+    Widget withText(Widget child) {
+      final hasSubtitles = p.subtitles.isNotEmpty;
+      if (p.texts.isEmpty) return child;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          child,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // Match the export geometry: the text block is anchored to the
+              // bottom, above the subtitle band when there is one.
+              final frameW = constraints.maxWidth;
+              final fontSize = (frameW * 0.055).clamp(12.0, 64.0);
+              return Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    frameW * 0.06,
+                    0,
+                    frameW * 0.06,
+                    // The export anchors the whole text bitmap (padding
+                    // included) at 8% / 15%; add the same padding here so the
+                    // visible glyphs land at the same height.
+                    constraints.maxHeight * (hasSubtitles ? 0.15 : 0.08) +
+                        fontSize * 0.4,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final t in p.texts.skip(
+                          p.texts.length > 4 ? p.texts.length - 4 : 0))
+                        Padding(
+                          padding: EdgeInsets.only(top: fontSize * 0.2),
+                          child: Text(
+                            t.text,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: fontSize,
+                              height: 1.2,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              shadows: const [
+                                Shadow(
+                                    color: Colors.black87,
+                                    blurRadius: 8,
+                                    offset: Offset(0, 1)),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      );
+    }
+
     if (asset != null &&
         asset.kind == MediaKind.video &&
         File(asset.path).existsSync()) {
-      return applyEffects(
-          _PreviewPlayer(key: ValueKey(asset.id), path: asset.path));
+      var offsetMs = 0;
+      final clipIndex = clip == null ? -1 : p.clips.indexOf(clip);
+      for (var i = 0; i < clipIndex; i++) {
+        offsetMs += p.clips[i].endMs - p.clips[i].startMs;
+      }
+      return withText(applyEffects(_PreviewPlayer(
+        key: ValueKey(asset.id),
+        path: asset.path,
+        cues: p.subtitles,
+        clipOffsetMs: offsetMs,
+        subtitleStyle: p.subtitleStyle,
+      )));
     }
     if (asset != null &&
         asset.kind == MediaKind.image &&
         File(asset.path).existsSync()) {
-      return applyEffects(Stack(
+      return withText(applyEffects(Stack(
         fit: StackFit.expand,
         children: [
           Image.file(File(asset.path), fit: BoxFit.contain,
               errorBuilder: (_, _, _) =>
                   const Center(child: Icon(Icons.broken_image_outlined))),
-          if (p.texts.isNotEmpty)
-            Center(
-              child: Text(p.texts.last.text,
-                  style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      shadows: [Shadow(blurRadius: 8)])),
-            ),
         ],
-      ));
+      )));
     }
     // Empty state.
     return Center(
@@ -685,10 +1035,11 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
         children: [
           Icon(Icons.movie_outlined, size: 56, color: g.textSecondary),
           const SizedBox(height: 8),
-          Text('Importez une vidéo ou une photo pour commencer',
+          Text('Importez une vidéo pour commencer',
+              textAlign: TextAlign.center,
               style: TextStyle(color: g.textSecondary, fontSize: 15)),
           const SizedBox(height: 4),
-          Text('${p.canvas.width}×${p.canvas.height} · ${p.canvas.fps} fps',
+          Text('Format ${p.canvas.width}×${p.canvas.height}',
               style: TextStyle(color: g.textSecondary, fontSize: 13)),
         ],
       ),
@@ -698,8 +1049,17 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
 
 /// Self-contained video preview with play/pause.
 class _PreviewPlayer extends StatefulWidget {
-  const _PreviewPlayer({super.key, required this.path});
+  const _PreviewPlayer({
+    super.key,
+    required this.path,
+    this.cues = const [],
+    this.clipOffsetMs = 0,
+    this.subtitleStyle = 'classic',
+  });
   final String path;
+  final List<SubtitleCue> cues;
+  final int clipOffsetMs;
+  final String subtitleStyle;
 
   @override
   State<_PreviewPlayer> createState() => _PreviewPlayerState();
@@ -759,22 +1119,235 @@ class _PreviewPlayerState extends State<_PreviewPlayer> {
         }
         setState(() {});
       },
-      child: Stack(
-        fit: StackFit.expand,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final frameW = constraints.maxWidth;
+          final frameH = constraints.maxHeight;
+          final subFontSize = (frameW * 0.045).clamp(9.0, 48.0);
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              FittedBox(
+                fit: BoxFit.contain,
+                child: SizedBox(
+                    width: c.value.size.width,
+                    height: c.value.size.height,
+                    child: VideoPlayer(c)),
+              ),
+              ValueListenableBuilder<VideoPlayerValue>(
+                valueListenable: c,
+                builder: (context, value, _) {
+                  final ms =
+                      widget.clipOffsetMs + value.position.inMilliseconds;
+                  String? active;
+                  for (final cue in widget.cues) {
+                    if (ms >= cue.startMs && ms < cue.endMs) {
+                      active = cue.text;
+                      break;
+                    }
+                  }
+                  if (active == null) return const SizedBox.shrink();
+                  return Positioned(
+                    left: frameW * 0.03,
+                    right: frameW * 0.03,
+                    bottom: frameH * 0.035,
+                    child: Center(
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: subFontSize * 0.55,
+                            vertical: subFontSize * 0.22),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(subFontSize * 0.3),
+                        ),
+                        child: Text(
+                          active,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: subFontSize,
+                            height: 1.2,
+                            fontWeight: widget.subtitleStyle == 'classic'
+                                ? FontWeight.w500
+                                : FontWeight.w800,
+                            shadows: widget.subtitleStyle == 'outline'
+                                ? const [
+                                    Shadow(color: Colors.black, blurRadius: 3),
+                                    Shadow(
+                                        color: Colors.black,
+                                        blurRadius: 3,
+                                        offset: Offset(1, 1)),
+                                    Shadow(
+                                        color: Colors.black,
+                                        blurRadius: 3,
+                                        offset: Offset(-1, -1)),
+                                  ]
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              if (!c.value.isPlaying)
+                const Center(
+                  child: Icon(Icons.play_circle_outline,
+                      color: Colors.white, size: 64),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Explicit feedback while a picked file is copied out of the picker cache:
+/// a long 4K clip can take a few seconds and silence feels broken.
+class _ImportOverlay extends StatelessWidget {
+  const _ImportOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    final g = context.grace;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          FittedBox(
-            fit: BoxFit.contain,
-            child: SizedBox(
-                width: c.value.size.width,
-                height: c.value.size.height,
-                child: VideoPlayer(c)),
-          ),
-          if (!c.value.isPlaying)
-            const Center(
-              child: Icon(Icons.play_circle_outline,
-                  color: Colors.white, size: 64),
-            ),
+          const SizedBox(
+              width: 36,
+              height: 36,
+              child: CircularProgressIndicator(strokeWidth: 3)),
+          const SizedBox(height: 16),
+          Text('Importation…',
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: g.textPrimary)),
+          const SizedBox(height: 4),
+          Text('Votre fichier est copié sur votre téléphone.',
+              style: TextStyle(fontSize: 13, color: g.textSecondary)),
         ],
+      ),
+    );
+  }
+}
+
+/// Bottom sheet that owns its [TextEditingController]. The controller must
+/// outlive the sheet's exit animation: disposing it as soon as the route
+/// future completed made Flutter assert ("used after being disposed") and
+/// flashed a red error screen while the sheet closed.
+class _TextSheet extends StatefulWidget {
+  const _TextSheet({required this.project, required this.onChanged});
+
+  final GraceProject project;
+  final VoidCallback onChanged;
+
+  @override
+  State<_TextSheet> createState() => _TextSheetState();
+}
+
+class _TextSheetState extends State<_TextSheet> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _add() {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    _controller.clear();
+    setState(() {
+      widget.project.texts
+          .add(TextLayer(id: GraceProject.newId(), text: text));
+    });
+    widget.onChanged();
+    FocusScope.of(context).unfocus();
+  }
+
+  void _remove(TextLayer layer) {
+    setState(() => widget.project.texts.remove(layer));
+    widget.onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final g = context.grace;
+    final p = widget.project;
+    final canAdd = _controller.text.trim().isNotEmpty;
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Texte sur la vidéo',
+                    textAlign: TextAlign.center,
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text('Il s’affiche en bas de l’image, sur toute la vidéo.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, color: g.textSecondary)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _controller,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration:
+                      const InputDecoration(hintText: 'Ex. : Bonjour à tous'),
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _add(),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: canAdd ? _add : null,
+                  child: const Text('Ajouter'),
+                ),
+                if (p.texts.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Textes ajoutés',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: g.textPrimary)),
+                  ),
+                  for (final t in List<TextLayer>.from(p.texts))
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(t.text,
+                          maxLines: 2, overflow: TextOverflow.ellipsis),
+                      trailing: IconButton(
+                        tooltip: 'Supprimer ce texte',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => _remove(t),
+                      ),
+                    ),
+                ],
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Fermer'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -793,12 +1366,76 @@ class _Action extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ActionChip(
-        avatar: Icon(icon, size: 18),
-        label: Text(label),
-        onPressed: enabled ? onTap : null,
+    final g = context.grace;
+    final active = enabled && onTap != null;
+    return SizedBox(
+      width: 86,
+      child: Material(
+        color: active ? g.surface : g.elevated,
+        borderRadius: BorderRadius.circular(GraceRadius.m),
+        child: InkWell(
+          onTap: active ? onTap : null,
+          borderRadius: BorderRadius.circular(GraceRadius.m),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon,
+                    size: 20,
+                    color: active ? g.primary : g.textSecondary),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: active ? g.textPrimary : g.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small labelled value used by the edit sheets ("Début 0,0 s").
+class _ValueBox extends StatelessWidget {
+  const _ValueBox({
+    required this.label,
+    required this.value,
+    this.strong = false,
+  });
+  final String label;
+  final String value;
+  final bool strong;
+
+  @override
+  Widget build(BuildContext context) {
+    final g = context.grace;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      decoration: BoxDecoration(
+        color: g.elevated,
+        borderRadius: BorderRadius.circular(GraceRadius.m),
+      ),
+      child: Column(
+        children: [
+          Text(label,
+              style: TextStyle(fontSize: 11, color: g.textSecondary)),
+          const SizedBox(height: 2),
+          Text(value,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: strong ? FontWeight.w700 : FontWeight.w600,
+                color: g.textPrimary,
+              )),
+        ],
       ),
     );
   }

@@ -1,6 +1,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -36,19 +37,31 @@ GoRouter buildRouter() => GoRouter(
       ],
     );
 
+/// Built once: recreating the router on every widget rebuild would reset
+/// navigation (theme/locale changes would kick the user back to the splash).
+final GoRouter graceRouter = buildRouter();
+
 class GraceApp extends ConsumerWidget {
   const GraceApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
+    final locale = ref.watch(localeProvider);
     return MaterialApp.router(
       title: 'GraceEdit',
       debugShowCheckedModeBanner: false,
       theme: graceTheme(Brightness.light),
       darkTheme: graceTheme(Brightness.dark),
       themeMode: themeMode,
-      routerConfig: buildRouter(),
+      locale: Locale(locale.name),
+      supportedLocales: const [Locale('fr'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      routerConfig: graceRouter,
     );
   }
 }

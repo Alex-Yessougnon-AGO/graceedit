@@ -87,10 +87,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       );
 
   Widget _pageTwo(GraceColors g) => _Page(
-        icon: Icons.dashboard_customize_outlined,
-        title: 'Du simple au Studio',
+        icon: Icons.lock_outline,
+        title: 'Simple, et privé',
         body:
-            'Commencez en mode simple. Le mode Studio\nrévèle la timeline multi-pistes quand vous êtes prêt.',
+            'Coupez, divisez, ajoutez du texte et des sous-titres.\n'
+            'Tout reste sur votre téléphone : aucun compte,\naucun envoi sur Internet.',
         colors: g,
       );
 
@@ -109,7 +110,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               style: TextStyle(
                   fontSize: 24, fontWeight: FontWeight.w700, color: g.textPrimary)),
           const SizedBox(height: 4),
-          Text('Modifiables à tout moment dans Paramètres.',
+          Text('Modifiables à tout moment dans Réglages.',
               style: TextStyle(color: g.textSecondary)),
           const SizedBox(height: GraceSpacing.l),
           const Text('Thème', style: TextStyle(fontWeight: FontWeight.w600)),

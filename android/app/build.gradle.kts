@@ -50,7 +50,7 @@ flutter {
 
 dependencies {
     // Real video export: trim + concat + rotate + resize via Media3 Transformer.
-    val media3Version = "1.5.1"
+    val media3Version = "1.9.2"
     implementation("androidx.media3:media3-transformer:$media3Version")
     implementation("androidx.media3:media3-effect:$media3Version")
     implementation("androidx.media3:media3-common:$media3Version")
