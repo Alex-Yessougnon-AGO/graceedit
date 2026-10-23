@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/state/app_providers.dart';
-import '../../core/l10n/generated/app_localizations.dart';
-import '../../core/theme/app_theme.dart';
-import '../../core/theme/tokens.dart';
-import '../../core/ui/grace_ui.dart';
+import 'package:graceedit/core/state/app_providers.dart';
+import 'package:graceedit/core/l10n/generated/app_localizations.dart';
+import 'package:graceedit/core/theme/app_theme.dart';
+import 'package:graceedit/core/theme/tokens.dart';
+import 'package:graceedit/core/ui/grace_ui.dart';
 
 /// Écran ENT-02 Bienvenue (premier lancement).
 /// Écran unique qui présente l'application, ses trois garanties,
@@ -22,10 +22,7 @@ class WelcomeScreen extends ConsumerWidget {
     final Color glyphColor = isLight ? Color(0xFF14151A) : Color(0xFF6F6C64);
     final Color textPrimary = isLight ? Color(0xFF14151A) : Color(0xFFF6F2EA);
     final Color textSecondary = isLight ? Color(0xFF5E5C58) : Color(0xFFB9B5AD);
-    final Color surfaceLight = Color(0xFFE4DED2);
-    final Color surfaceDark = Color(0xFF2A2C33);
     final Color accent = Color(0xFFE2542B);
-
     final l10n = AppLocalizations.of(context)!;
 
     // Marquer comme vu d'ici (au moins l'affichage a commencé).
@@ -46,10 +43,10 @@ class WelcomeScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // --- En-tête : symbole + logotype alignés à gauche ---
-                _Header(accentColor: accentColor, glyphColor: glyphColor),
+                // --- En-tête : symbole + logotype ---
+                _Header(glyphColor: glyphColor),
 
-                const SizedBox(height: 56 - 24), // 56dp du haut - marge 24dp
+                const SizedBox(height: 56 - 24),
 
                 // --- Titre ---
                 Text(
@@ -81,12 +78,12 @@ class WelcomeScreen extends ConsumerWidget {
                 const SizedBox(height: 32),
 
                 // --- Bande décorative (4 blocs arrondis) ---
-                _DecorativeBands(accentColor: accentColor),
+                _DecorativeBands(accentColor: accent),
 
                 const SizedBox(height: 32),
 
                 // --- Garanties ---
-                _Guarantees(accentColor: accentColor, isLight: isLight),
+                _Guarantees(accentColor: accent, isLight: isLight),
 
                 const SizedBox(height: 48),
 
@@ -102,15 +99,10 @@ class WelcomeScreen extends ConsumerWidget {
 }
 
 /// En-tête : symbole + logotype alignés à gauche.
-/// Symbole 36 dp, marge 24 dp, à 56 dp du haut.
 class _Header extends StatelessWidget {
-  final Color accentColor;
   final Color glyphColor;
 
-  const _Header({
-    required this.accentColor,
-    required this.glyphColor,
-  });
+  const _Header({required this.glyphColor});
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +111,6 @@ class _Header extends StatelessWidget {
       children: [
         GraceMark(
           size: 36,
-          // La couleur est gérée par le widget GraceMark via context.grace
         ),
         const SizedBox(width: 12),
         const Text(
@@ -149,10 +140,10 @@ class _DecorativeBands extends StatelessWidget {
 
     return Row(
       children: [
-        _Band(color: surface, accent: false, accentColor: accentColor),
-        _Band(color: surface, accent: true, accentColor: accentColor),
-        _Band(color: surface, accent: false, accentColor: accentColor),
-        _Band(color: surface, accent: true, accentColor: accentColor),
+        _Band(color: surface, accent: false, glyphColor: glyphColor),
+        _Band(color: surface, accent: true, glyphColor: glyphColor),
+        _Band(color: surface, accent: false, glyphColor: glyphColor),
+        _Band(color: surface, accent: true, glyphColor: glyphColor),
       ],
     );
   }
@@ -162,13 +153,13 @@ class _DecorativeBands extends StatelessWidget {
 class _Band extends StatelessWidget {
   final Color color;
   final bool accent;
-  final Color accentColor;
+  final Color glyphColor;
 
-  const _Band({required this.color, required this.accent, required this.accentColor});
+  const _Band({required this.color, required this.accent, required this.glyphColor});
 
   @override
   Widget build(BuildContext context) {
-    final actualAccent = accent ? accentColor : Colors.transparent;
+    final actualAccent = accent ? glyphColor : Colors.transparent;
     return Container(
       width: 64,
       height: 56,
@@ -198,7 +189,6 @@ class _Guarantees extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color textColor = isLight ? Color(0xFF14151A) : Color(0xFFF6F2EA);
-    final Color dotColor = isLight ? Color(0xFF14151A) : Color(0xFFF6F2EA);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,18 +241,12 @@ class _Actions extends ConsumerWidget {
   final WidgetRef ref;
   final bool isLight;
 
-  const _Actions({required this.ref, required this.isLight});
+  const _Actions({required this.ref, required isLight});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final Color textPrimary = isLight ? Color(0xFF14151A) : Color(0xFFF6F2EA);
     final Color textSecondary = isLight ? Color(0xFF5E5C58) : Color(0xFFB9B5AD);
-    final Color btnBgLight = Color(0xFF14151A);
-    final Color btnBgDark = Color(0xFFF6F2EA);
-
-    final Color btnBg = isLight ? btnBgLight : btnBgDark;
-    final Color btnText = isLight ? textSecondary : textPrimary;
-    final Color secBtnColor = isLight ? textSecondary : textPrimary;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -274,7 +258,7 @@ class _Actions extends ConsumerWidget {
           },
           style: ElevatedButton.styleFrom(
             minimumSize: const Size(double.infinity, 56),
-            backgroundColor: btnBg,
+            backgroundColor: isLight ? Color(0xFF14151A) : Color(0xFFF6F2EA),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(0),
             ),
@@ -282,7 +266,7 @@ class _Actions extends ConsumerWidget {
           child: Text(
             'Monter une vidéo',
             style: TextStyle(
-              color: btnText,
+              color: isLight ? Color(0xFF5E5C58) : Color(0xFFF6F2EA),
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),

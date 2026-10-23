@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/state/app_providers.dart';
-import '../../core/router/app_router.dart';
-import '../../features/welcome/welcome_screen.dart';
-import '../../core/theme/app_theme.dart';
+import 'package:graceedit/core/state/app_providers.dart';
+import 'package:graceedit/core/router/app_router.dart';
+import 'package:graceedit/features/welcome/welcome_screen.dart';
 
 /// Écran ENT-01 Splash (page de lancement).
 /// Affiche le symbole GraceEdit centré pendant le temps d'initialisation
-/// réel. Fond clair #F6F2EA / sombre #14151A. Aucune chaîne en dur,
-/// aucune animation décorative. 120 dp de large, centré.
+/// réel. Détermine la route suivante en fonction de l'état de la session.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -80,8 +78,7 @@ class _SplashScreenState extends State<SplashScreen> {
       body: Center(
         child: GraceMark(
           size: 120,
-          // La couleur du symbole est tirée du thème via context.grace
-          // Pas de couleur explicite : GraceMark utilise context.grace
+          color: isLight ? Color(0xFF14151A) : Color(0xFF6F6C64),
         ),
       ),
     );
