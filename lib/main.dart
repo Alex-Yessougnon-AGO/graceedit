@@ -1,30 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/theme/app_theme.dart';
-import 'core/state/app_providers.dart';
-import 'features/splash/splash_screen.dart';
 import 'core/l10n/generated/app_localizations.dart';
 import 'core/router/app_router.dart';
+import 'core/theme/app_theme.dart';
 
 /// Point d'entrée principal de l'application GraceEdit V1.
-void main() => runApp(const GraceEditApp());
+///
+/// Le thème et les traductions sont disponibles dès la première image : le
+/// splash (`ENT-01`) est une route comme les autres et attend lui-même la fin
+/// du bootstrap. On n'affiche donc qu'un seul splash perçu.
+void main() => runApp(const ProviderScope(child: GraceEditApp()));
 
-/// L'application Riverpod wrapper.
-class GraceEditApp extends ConsumerWidget {
+class GraceEditApp extends StatelessWidget {
   const GraceEditApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Regarder le bootstrap ; tant qu'il n'est pas terminé, on montre le splash.
-    final bootstrapAsync = ref.watch(bootstrapProvider);
-
-    // Durant le chargement, on affiche le splash.
-    if (bootstrapAsync.isLoading) {
-      return const SplashScreen();
-    }
-
-    // Bootstrap terminé — on peut afficher l'app avec navigation.
+  Widget build(BuildContext context) {
     return MaterialApp.router(
       routerDelegate: router.routerDelegate,
       routeInformationParser: router.routeInformationParser,

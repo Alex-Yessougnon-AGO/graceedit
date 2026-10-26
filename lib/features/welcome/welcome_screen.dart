@@ -2,93 +2,81 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:graceedit/core/state/app_providers.dart';
-import 'package:graceedit/core/l10n/generated/app_localizations.dart';
-import 'package:graceedit/core/theme/app_theme.dart';
-import 'package:graceedit/core/theme/tokens.dart';
-import 'package:graceedit/core/ui/grace_ui.dart';
+import '../../core/l10n/generated/app_localizations.dart';
+import '../../core/state/providers.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/theme/tokens.dart';
+import '../../core/ui/brand.dart';
+import '../../core/ui/buttons.dart';
 
-/// Écran ENT-02 Bienvenue (premier lancement).
-/// Écran unique qui présente l'application, ses trois garanties,
-/// puis deux actions : « Monter une vidéo » et « Explorer d'abord ».
-/// N'apparaît qu'une seule fois (indicateur local).
 class WelcomeScreen extends ConsumerWidget {
   const WelcomeScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isLight = Theme.of(context).brightness == Brightness.light;
-    final Color background = isLight ? Color(0xFFEDE7DB) : Color(0xFF1D1F25);
-    final Color glyphColor = isLight ? Color(0xFF14151A) : Color(0xFF6F6C64);
-    final Color textPrimary = isLight ? Color(0xFF14151A) : Color(0xFFF6F2EA);
-    final Color textSecondary = isLight ? Color(0xFF5E5C58) : Color(0xFFB9B5AD);
-    final Color accent = Color(0xFFE2542B);
-    final l10n = AppLocalizations.of(context)!;
-
-    // Marquer comme vu d'ici (au moins l'affichage a commencé).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(bootstrapProvider).valueOrNull?.copyWith(welcomeSeen: true);
-    });
-
+    final p = context.grace;
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
-      backgroundColor: background,
+      backgroundColor: p.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
+        child: Center(
           child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: MediaQuery.of(context).size.height,
-              maxWidth: 480,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // --- En-tête : symbole + logotype ---
-                _Header(glyphColor: glyphColor),
-
-                const SizedBox(height: 56 - 24),
-
-                // --- Titre ---
-                Text(
-                  l10n.welcomeTitle,
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 34,
-                    fontWeight: FontWeight.w600,
-                    height: 40 / 34,
-                    color: textPrimary,
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
+                  sliver: SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const GraceBrand(markSize: 36, textSize: 15),
+                        const SizedBox(height: 64),
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            l10n.welcomeTitle,
+                            style: GraceType.display,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          l10n.welcomeBody,
+                          style: GraceType.body.copyWith(color: p.secondary),
+                        ),
+                        const SizedBox(height: 40),
+                        const _Bands(),
+                        const SizedBox(height: 32),
+                        _Guarantee(text: l10n.welcomeGuaranteeNoAccount),
+                        _Guarantee(text: l10n.welcomeGuaranteeOffline),
+                        _Guarantee(text: l10n.welcomeGuaranteeLocal),
+                        const Spacer(),
+                        const SizedBox(height: 32),
+                        GracePrimaryButton(
+                          label: l10n.welcomeStart,
+                          onPressed: () async {
+                            final store = ref.read(storeProvider);
+                            await store.setWelcomeSeen();
+                            if (context.mounted) context.go('/home');
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: GraceTextAction(
+                            label: l10n.welcomeExplore,
+                            onPressed: () async {
+                              final store = ref.read(storeProvider);
+                              await store.setWelcomeSeen();
+                              if (context.mounted) context.go('/home');
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  textAlign: TextAlignment.start,
                 ),
-
-                const SizedBox(height: 16),
-
-                // --- Texte descriptif ---
-                Text(
-                  l10n.welcomeSubtitle,
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 16,
-                    height: 24 / 16,
-                    color: textSecondary,
-                  ),
-                  textAlign: TextAlignment.start,
-                ),
-
-                const SizedBox(height: 32),
-
-                // --- Bande décorative (4 blocs arrondis) ---
-                _DecorativeBands(accentColor: accent),
-
-                const SizedBox(height: 32),
-
-                // --- Garanties ---
-                _Guarantees(accentColor: accent, isLight: isLight),
-
-                const SizedBox(height: 48),
-
-                // --- Actions ---
-                _Actions(ref: ref, isLight: isLight),
               ],
             ),
           ),
@@ -98,203 +86,68 @@ class WelcomeScreen extends ConsumerWidget {
   }
 }
 
-/// En-tête : symbole + logotype alignés à gauche.
-class _Header extends StatelessWidget {
-  final Color glyphColor;
-
-  const _Header({required this.glyphColor});
+class _Bands extends StatelessWidget {
+  const _Bands();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GraceMark(
-          size: 36,
+    final p = context.grace;
+    return ExcludeSemantics(
+      child: SizedBox(
+        height: 56,
+        child: Row(
+          children: [
+            Expanded(flex: 50, child: _Block(color: p.surface)),
+            const SizedBox(width: 8),
+            Expanded(flex: 35, child: _Block(color: GraceColors.accent)),
+            const SizedBox(width: 8),
+            Expanded(flex: 30, child: _Block(color: p.surface)),
+            const SizedBox(width: 8),
+            Expanded(flex: 25, child: _Block(color: p.surface)),
+          ],
         ),
-        const SizedBox(width: 12),
-        const Text(
-          'GraceEdit',
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 34,
-            fontWeight: FontWeight.w600,
-            height: 40 / 34,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Bande décorative : 4 blocs arrondis dont un en accent.
-class _DecorativeBands extends StatelessWidget {
-  final Color accentColor;
-
-  const _DecorativeBands({required this.accentColor});
-
-  @override
-  Widget build(BuildContext context) {
-    final isLight = Theme.of(context).brightness == Brightness.light;
-    final Color surface = isLight ? Color(0xFFE4DED2) : Color(0xFF2A2C33);
-
-    return Row(
-      children: [
-        _Band(color: surface, accent: false, glyphColor: glyphColor),
-        _Band(color: surface, accent: true, glyphColor: glyphColor),
-        _Band(color: surface, accent: false, glyphColor: glyphColor),
-        _Band(color: surface, accent: true, glyphColor: glyphColor),
-      ],
-    );
-  }
-}
-
-/// Bloc arrondi décoratif.
-class _Band extends StatelessWidget {
-  final Color color;
-  final bool accent;
-  final Color glyphColor;
-
-  const _Band({required this.color, required this.accent, required this.glyphColor});
-
-  @override
-  Widget build(BuildContext context) {
-    final actualAccent = accent ? glyphColor : Colors.transparent;
-    return Container(
-      width: 64,
-      height: 56,
-      margin: const EdgeInsets.only(right: 8),
-      decoration: BoxDecoration(
-        color: actualAccent == Colors.transparent ? color : null,
-        border: actualAccent != Colors.transparent
-            ? Border.only(
-                topLeft: const Radius.circular(10),
-                topRight: const Radius.circular(10),
-                bottomLeft: const Radius.circular(10),
-                bottomRight: const Radius.circular(10),
-              )
-            : null,
       ),
     );
   }
 }
 
-/// Garanties : trois lignes avec puces.
-class _Guarantees extends StatelessWidget {
-  final Color accentColor;
-  final bool isLight;
-
-  const _Guarantees({required this.accentColor, required this.isLight});
-
-  @override
-  Widget build(BuildContext context) {
-    final Color textColor = isLight ? Color(0xFF14151A) : Color(0xFFF6F2EA);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _GuaranteeLine(
-          icon: Icons.person_off,
-          text: 'Aucun compte nécessaire',
-          color: textColor,
-        ),
-        _GuaranteeLine(
-          icon: Icons.offline_bolt,
-          text: 'Fonctionne sans connexion',
-          color: textColor,
-        ),
-        _GuaranteeLine(
-          icon: Icons.lock_outline,
-          text: 'Vos fichiers restent sur votre téléphone',
-          color: textColor,
-        ),
-      ],
-    );
-  }
-}
-
-/// Une ligne de garantie avec icône et texte.
-class _GuaranteeLine extends StatelessWidget {
-  final IconData icon;
-  final String text;
+class _Block extends StatelessWidget {
+  const _Block({required this.color});
   final Color color;
 
-  const _GuaranteeLine({required this.icon, required this.text, required this.color});
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(10),
+    ),
+  );
+}
+
+class _Guarantee extends StatelessWidget {
+  const _Guarantee({required this.text});
+  final String text;
 
   @override
   Widget build(BuildContext context) {
+    final p = context.grace;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 8),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 15))),
+          Padding(
+            padding: const EdgeInsets.only(top: 9),
+            child: Container(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(color: p.text, shape: BoxShape.circle),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(child: Text(text, style: GraceType.bodyCompact)),
         ],
       ),
-    );
-  }
-}
-
-/// Actions : « Monter une vidéo » (plein) et « Explorer d'abord » (texte).
-class _Actions extends ConsumerWidget {
-  final WidgetRef ref;
-  final bool isLight;
-
-  const _Actions({required this.ref, required isLight});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final Color textPrimary = isLight ? Color(0xFF14151A) : Color(0xFFF6F2EA);
-    final Color textSecondary = isLight ? Color(0xFF5E5C58) : Color(0xFFB9B5AD);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Bouton principal : « Monter une vidéo »
-        ElevatedButton(
-          onPressed: () {
-            context.go('/import/new');
-          },
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 56),
-            backgroundColor: isLight ? Color(0xFF14151A) : Color(0xFFF6F2EA),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(0),
-            ),
-          ),
-          child: Text(
-            'Monter une vidéo',
-            style: TextStyle(
-              color: isLight ? Color(0xFF5E5C58) : Color(0xFFF6F2EA),
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // Bouton secondaire : « Explorer d'abord »
-        OutlinedButton(
-          onPressed: () {
-            context.go('/home');
-          },
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 48),
-            foregroundColor: textSecondary,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(0),
-            ),
-          ),
-          child: Text(
-            'Explorer d\'abord',
-            style: TextStyle(
-              fontSize: 16,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

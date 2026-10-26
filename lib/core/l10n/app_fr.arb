@@ -1,0 +1,786 @@
+{
+  "@@locale": "fr",
+  "appTitle": "GraceEdit",
+  "brandTagline": "Montez vos vidéos, simplement.",
+  "actionCancel": "Annuler",
+  "actionClose": "Fermer",
+  "actionDone": "Terminé",
+  "actionRetry": "Réessayer",
+  "actionDelete": "Supprimer",
+  "actionRename": "Renommer",
+  "actionDuplicate": "Dupliquer",
+  "actionExport": "Exporter",
+  "actionShare": "Partager",
+  "actionBack": "Retour",
+  "actionOpen": "Ouvrir",
+  "actionSelect": "Sélectionner",
+  "actionSelectAll": "Tout sélectionner",
+  "actionMoveUp": "Monter",
+  "actionMoveDown": "Descendre",
+  "actionRemove": "Retirer",
+  "actionAdd": "Ajouter",
+  "actionRestore": "Restaurer",
+  "actionUndo": "Annuler",
+  "actionRedo": "Rétablir",
+  "actionSave": "Enregistrer",
+  "actionMore": "Plus",
+  "actionLess": "Moins",
+  "actionPlay": "Lire",
+  "actionPause": "Pause",
+  "saveStateSaved": "Enregistré",
+  "saveStateSaving": "Enregistrement…",
+  "saveStateFailed": "Non enregistré",
+  "toastClipDeleted": "Clip supprimé",
+  "toastClipSplit": "Clip scindé",
+  "toastTextDeleted": "Texte supprimé",
+  "toastAudioDeleted": "Musique supprimée",
+  "toastProjectTrashed": "Projet déplacé dans la corbeille",
+  "toastProjectsTrashed": "Projets déplacés dans la corbeille",
+  "toastProjectRestored": "Projet restauré",
+  "toastMediaRemoved": "Média retiré du projet",
+  "toastExportCancelled": "Export annulé",
+  "toastCoverUpdated": "Couverture mise à jour",
+  "splashLoadingSemantics": "GraceEdit, chargement",
+  "splashPreparing": "Préparation en cours…",
+  "splashSlowHint": "Cela prend plus de temps que d'habitude.",
+  "splashErrorTitle": "L'application n'a pas pu démarrer.",
+  "splashErrorBody": "Vos projets sont intacts. Fermez les autres applications, puis réessayez.",
+  "splashRetry": "Réessayer",
+  "welcomeTitle": "Montez vos vidéos, simplement.",
+  "welcomeBody": "Importez une vidéo, coupez, ajoutez du texte, puis exportez.",
+  "welcomeGuaranteeNoAccount": "Aucun compte nécessaire",
+  "welcomeGuaranteeOffline": "Fonctionne sans connexion",
+  "welcomeGuaranteeLocal": "Vos fichiers restent sur votre téléphone",
+  "welcomeStart": "Monter une vidéo",
+  "welcomeExplore": "Explorer d'abord",
+  "homeResume": "Reprendre",
+  "homeRecent": "Récents",
+  "homeSeeAll": "Tout voir",
+  "homeNewProject": "Nouveau projet",
+  "homeEmptyTitle": "Créez votre premier projet",
+  "homeEmptyBody": "Choisissez une vidéo, coupez-la, ajoutez du texte, puis exportez.",
+  "homeMissingMedia": "Média manquant",
+  "homeExportRunning": "Export en cours",
+  "homeExportRunningBody": "Votre vidéo est en préparation.",
+  "homeStorageLow": "Stockage faible : {free} libres.",
+  "@homeStorageLow": {
+    "placeholders": {
+      "free": {
+        "type": "String"
+      }
+    }
+  },
+  "homeDraftRecovered": "Brouillon récupéré",
+  "homeProjectCount": "{count, plural, =0{Aucun projet} =1{1 projet} other{{count} projets}}",
+  "@homeProjectCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "modifiedAt": "Modifié {when}",
+  "@modifiedAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "importTitle": "Nouveau projet",
+  "importNameLabel": "Nom du projet",
+  "importDefaultName": "Projet du {date}",
+  "@importDefaultName": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "importMediaCount": "{count, plural, =0{Aucun média} =1{1 média} other{{count} médias}}",
+  "@importMediaCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "importAddMedia": "Ajouter des médias",
+  "importStart": "Commencer le montage",
+  "importStartWithCount": "{count, plural, =1{Commencer avec 1 média} other{Commencer avec {count} médias}}",
+  "@importStartWithCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "importPreparing": "Préparation {percent} %",
+  "@importPreparing": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "importUnsupported": "Format non pris en charge",
+  "importUnreadable": "Fichier illisible",
+  "importRemoveFromProject": "Retirer du projet",
+  "importAddHint": "Vos fichiers d'origine ne sont jamais modifiés.",
+  "editorUntitled": "Sans titre",
+  "editorAdd": "Ajouter",
+  "editorAudio": "Audio",
+  "editorText": "Texte",
+  "editorAdjust": "Ajuster",
+  "editorFormat": "Format",
+  "editorCover": "Couverture",
+  "editorSplit": "Scinder",
+  "editorVolume": "Volume",
+  "editorCrop": "Cadrer",
+  "editorDelete": "Supprimer",
+  "editorDuplicate": "Dupliquer",
+  "editorEmptyTitle": "Votre timeline est vide.",
+  "editorEmptyBody": "Ajoutez une vidéo pour commencer.",
+  "editorAddMedia": "Ajouter un média",
+  "editorMissingMedia": "Média manquant",
+  "editorReconnect": "Reconnecter",
+  "editorTextTrack": "Textes",
+  "editorAudioTrack": "Audio",
+  "editorVideoTrack": "Vidéo",
+  "editorTimeline": "Timeline",
+  "editorPreview": "Aperçu",
+  "editorSaveFailed": "La sauvegarde a échoué.",
+  "editorSaveFailedBody": "Votre travail est conservé sur cet appareil. Vérifiez l'espace libre, puis réessayez.",
+  "editorRetrySave": "Réessayer",
+  "editorZoomIn": "Zoom avant",
+  "editorZoomOut": "Zoom arrière",
+  "editorClipActions": "Actions du clip",
+  "trimTitle": "Rogner",
+  "trimStart": "Début",
+  "trimEnd": "Fin",
+  "trimRemoved": "−{duration}",
+  "@trimRemoved": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "trimDurationLabel": "Durée {duration}",
+  "@trimDurationLabel": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "trimMinimum": "Durée minimale : 0,1 s.",
+  "textTitle": "Texte",
+  "textFieldLabel": "Votre texte",
+  "textPlaceholder": "Écrivez ici",
+  "textPresetTitle": "Titre",
+  "textPresetSubtitle": "Sous-titre",
+  "textPresetCaption": "Légende",
+  "textEdit": "Modifier",
+  "textStyle": "Style",
+  "textColor": "Couleur",
+  "textTabStyle": "Style",
+  "textTabFont": "Police",
+  "textTabColor": "Couleur",
+  "textTabBackground": "Fond",
+  "textSize": "Taille",
+  "textOpacity": "Opacité",
+  "textPosition": "Position",
+  "textRotation": "Rotation",
+  "textBackgroundOn": "Fond derrière le texte",
+  "textColorWhite": "Blanc",
+  "textColorBlack": "Noir",
+  "textColorAccent": "Orange",
+  "textColorIvory": "Ivoire",
+  "textColorSlate": "Ardoise",
+  "textColorGreen": "Vert",
+  "textMoveHint": "Faites glisser pour déplacer, pincez pour redimensionner.",
+  "textRotationHint": "Rotation par pas de 15°.",
+  "audioTitle": "Audio",
+  "audioVideoSound": "Son de la vidéo",
+  "audioMusic": "Musique",
+  "audioMute": "Couper le son",
+  "audioUnmute": "Rétablir le son",
+  "audioAddMusic": "Ajouter de la musique",
+  "audioMusicHint": "La musique démarre à la tête de lecture et s'arrête à la fin du projet.",
+  "audioVolumeLabel": "Volume",
+  "audioFade": "Fondu",
+  "audioFadeIn": "Fondu d'entrée",
+  "audioFadeOut": "Fondu de sortie",
+  "audioFadeTooLong": "La somme des fondus dépasse la durée du son.",
+  "audioVolumePercent": "{percent} %",
+  "@audioVolumePercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "audioFadeSeconds": "{seconds} s",
+  "@audioFadeSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "adjustTitle": "Ajuster",
+  "adjustBrightness": "Luminosité",
+  "adjustContrast": "Contraste",
+  "adjustSaturation": "Saturation",
+  "adjustScope": "Portée",
+  "adjustScopeClip": "Ce clip",
+  "adjustScopeAll": "Tout le projet",
+  "adjustCompare": "Comparer",
+  "adjustCompareHint": "Maintenez pour voir l'original.",
+  "adjustReset": "Réinitialiser",
+  "formatTitle": "Format",
+  "formatVertical": "Vertical 9:16",
+  "formatSquare": "Carré 1:1",
+  "formatHorizontal": "Horizontal 16:9",
+  "formatPortrait": "Portrait 4:5",
+  "formatFitMode": "Cadrage",
+  "formatFill": "Remplir",
+  "formatFit": "Ajuster",
+  "formatFitHint": "Ajuster : l’image entière est gardée, avec des bandes noires.",
+  "cropTitle": "Cadrer",
+  "cropRotate": "Pivoter",
+  "cropMirror": "Miroir",
+  "cropStraighten": "Redresser",
+  "cropReset": "Réinitialiser",
+  "cropGrid": "Grille des tiers",
+  "coverTitle": "Couverture",
+  "coverFromVideo": "Image de la vidéo",
+  "coverFromGallery": "Galerie",
+  "coverAuto": "Automatique",
+  "coverAutoBody": "La première image de la vidéo est utilisée.",
+  "coverUsage": "Dans vos projets",
+  "coverPickImage": "Choisir une image",
+  "coverCropHint": "Glissez pour recadrer, pincez pour zoomer.",
+  "coverReset": "Revenir à l'image de la vidéo",
+  "exportTitle": "Exporter",
+  "exportSummary": "Récapitulatif",
+  "exportDuration": "Durée",
+  "exportFormatLabel": "Format",
+  "exportQuality": "Qualité",
+  "exportQualityHigh": "Haute · 1080p",
+  "exportQualityStandard": "Standard · 720p",
+  "exportFramesPerSecond": "30 images/s",
+  "exportDestination": "Destination",
+  "exportDestinationGallery": "Galerie du téléphone",
+  "exportSpaceFree": "Espace disponible",
+  "exportSpaceNeeded": "Espace nécessaire",
+  "exportNotEnoughSpaceTitle": "Espace insuffisant",
+  "exportNotEnoughSpaceBody": "Il faut environ {needed}. Il reste {free}. Libérez de l'espace pour continuer.",
+  "@exportNotEnoughSpaceBody": {
+    "placeholders": {
+      "needed": {
+        "type": "String"
+      },
+      "free": {
+        "type": "String"
+      }
+    }
+  },
+  "exportDisabledEmpty": "Ajoutez au moins un clip pour exporter.",
+  "exportDisabledMissing": "Reconnectez le média manquant pour exporter.",
+  "exportBatteryLow": "Batterie faible : l'export peut s'interrompre.",
+  "exportNotificationsTitle": "Être prévenu à la fin de l'export ?",
+  "exportNotificationsBody": "GraceEdit peut afficher la progression et vous prévenir quand la vidéo est prête. L'export fonctionne aussi sans notification.",
+  "exportNotificationsAllow": "Autoriser les notifications",
+  "exportNotificationsLater": "Pas maintenant",
+  "exportPreparing": "Préparation…",
+  "exportRendering": "Création de la vidéo",
+  "exportVerifying": "Vérification…",
+  "exportElapsed": "Temps écoulé : {duration}",
+  "@exportElapsed": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "exportBackground": "Continuer en arrière-plan",
+  "exportCancel": "Annuler l'export",
+  "exportCancelTitle": "Annuler l'export ?",
+  "exportCancelBody": "La vidéo en cours sera supprimée. Votre projet reste intact.",
+  "exportCancelKeep": "Continuer l'export",
+  "exportCancelConfirm": "Annuler l'export",
+  "exportSuccessTitle": "Vidéo enregistrée",
+  "exportSuccessBody": "Votre vidéo est dans la galerie du téléphone.",
+  "exportSuccessName": "Nom",
+  "exportSuccessDimensions": "Dimensions",
+  "exportSuccessDuration": "Durée",
+  "exportSuccessSize": "Taille",
+  "exportViewInGallery": "Voir dans la galerie",
+  "exportContinueEditing": "Continuer à modifier",
+  "exportFailedTitle": "L'export n'a pas abouti",
+  "exportFailedSafe": "Votre projet est intact.",
+  "exportFailedRender": "La vidéo n'a pas pu être créée.",
+  "exportFailedStorage": "L'espace libre s'est épuisé pendant la création.",
+  "exportFailedGallery": "La vidéo a été créée mais n'a pas pu être ajoutée à la galerie.",
+  "exportFailedInterrupted": "L'export a été interrompu.",
+  "exportFailedCancelled": "L'export a été annulé.",
+  "exportTryStandard": "Exporter en Standard",
+  "exportDetails": "Détails techniques",
+  "exportFreeSpace": "Libérer de l’espace",
+  "exportRetryGallery": "Réessayer l'ajout",
+  "exportSaveAs": "Enregistrer sous…",
+  "exportRestart": "Recommencer l'export",
+  "exportVerifyingFile": "Vérification du fichier…",
+  "exportRegistering": "Ajout à la galerie…",
+  "projectsTitle": "Projets",
+  "projectsSearch": "Rechercher un projet",
+  "projectsSearchClear": "Effacer la recherche",
+  "projectsSort": "Trier",
+  "projectsSortRecent": "Récents",
+  "projectsSortOldest": "Plus anciens",
+  "projectsSortName": "Nom A–Z",
+  "projectsViewGrid": "Grille",
+  "projectsViewList": "Liste",
+  "projectsTrash": "Corbeille",
+  "projectsSelectedCount": "{count, plural, =1{1 sélectionné} other{{count} sélectionnés}}",
+  "@projectsSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "projectsEmptyTitle": "Aucun projet",
+  "projectsEmptyBody": "Vos montages apparaîtront ici.",
+  "projectsNoResultsTitle": "Aucun résultat",
+  "projectsNoResultsBody": "Essayez un autre titre.",
+  "projectsDeleteTitle": "{count, plural, =1{Supprimer ce projet ?} other{Supprimer {count} projets ?}}",
+  "@projectsDeleteTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "projectsDeleteBody": "Ils resteront 30 jours dans la corbeille, puis seront supprimés.",
+  "projectsToTrash": "Mettre à la corbeille",
+  "projectsDeleteForever": "Supprimer définitivement",
+  "projectsDeleteForeverTitle": "Supprimer définitivement ?",
+  "projectsDeleteForeverSingularBody": "Ce projet ne pourra pas être récupéré.",
+  "projectsDeleteForeverPluralBody": "Ces projets ne pourront pas être récupérés.",
+  "projectsDeleteForeverAction": "Supprimer définitivement",
+  "projectsDeletedForever": "Supprimé définitivement",
+  "projectsExportingLocked": "Un projet en cours d'export ne peut pas être supprimé.",
+  "projectsRenameTitle": "Renommer",
+  "projectsRenameEmpty": "Le nom ne peut pas être vide.",
+  "projectsRenameTooLong": "60 caractères maximum.",
+  "projectsDuplicateSuffix": "{name} (copie)",
+  "@projectsDuplicateSuffix": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "projectsMenu": "Actions du projet {name}",
+  "@projectsMenu": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "projectsOpen": "Ouvrir {name}",
+  "@projectsOpen": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trashTitle": "Corbeille",
+  "trashEmpty": "La corbeille est vide.",
+  "trashBody": "Les projets supprimés restent 30 jours ici.",
+  "trashDaysLeft": "Encore {days} jours",
+  "@trashDaysLeft": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "trashLastDay": "Suppression demain",
+  "trashPurge": "Vider la corbeille",
+  "trashPurgeTitle": "Vider la corbeille ?",
+  "trashPurgeBody": "Tous les projets de la corbeille seront supprimés pour toujours.",
+  "trashPurged": "Corbeille vidée",
+  "missingTitle": "Média manquant",
+  "missingBody": "GraceEdit ne trouve plus ce fichier. Il a peut-être été déplacé ou supprimé.",
+  "missingReconnect": "Reconnecter",
+  "missingRemove": "Retirer du projet",
+  "missingOpen": "Ouvrir le projet",
+  "missingOpenWithout": "Ouvrir sans ces médias",
+  "missingDifferentTitle": "Ce fichier est différent",
+  "missingDifferentBody": "Le fichier choisi dure {newDuration}, l’original durait {oldDuration}. Les coupes et les textes de ce clip risquent d’être décalés.",
+  "missingChooseAnother": "Choisir un autre fichier",
+  "missingAllGood": "Tous les médias sont reconnectés.",
+  "missingFileLabel": "Fichier",
+  "missingSeveral": "{count, plural, =1{1 média manquant} other{{count} médias manquants}}",
+  "@missingSeveral": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsTitle": "Réglages",
+  "settingsAppearance": "Apparence",
+  "settingsTheme": "Thème",
+  "settingsThemeSystem": "Système",
+  "settingsThemeLight": "Clair",
+  "settingsThemeDark": "Sombre",
+  "settingsLanguage": "Langue",
+  "settingsLanguageSystem": "Langue du téléphone",
+  "settingsLanguageFrench": "Français",
+  "settingsLanguageEnglish": "English",
+  "settingsMotion": "Réduire les animations",
+  "settingsHaptics": "Retour haptique",
+  "settingsDeletion": "Suppression",
+  "settingsDeletionAsk": "Demander à chaque fois",
+  "settingsDeletionTrash": "Toujours mettre à la corbeille",
+  "settingsTrash": "Corbeille",
+  "settingsStorage": "Stockage",
+  "settingsHelp": "Aide et à propos",
+  "settingsVersion": "Version {version}",
+  "@settingsVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "storageTitle": "Stockage",
+  "storageUsed": "Utilisé",
+  "storageProjects": "Projets",
+  "storageCovers": "Couvertures",
+  "storageExports": "Exports non enregistrés",
+  "storageThumbnails": "Miniatures",
+  "storageFree": "Espace libre",
+  "storageClearCache": "Vider le cache",
+  "storageClearCacheBody": "Les miniatures et les exports non enregistrés seront supprimés. Vos projets et vos médias ne sont pas touchés.",
+  "storageCleared": "Cache vidé · {size} libérés",
+  "@storageCleared": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "storageComputing": "Calcul en cours…",
+  "helpTitle": "Aide et à propos",
+  "helpReplay": "Revoir la présentation",
+  "helpFaq": "Questions fréquentes",
+  "helpDiagnostic": "Rapport de diagnostic",
+  "helpDiagnosticBody": "Généré sur votre téléphone. Il n'est jamais envoyé automatiquement.",
+  "helpDiagnosticCreate": "Créer le rapport",
+  "helpDiagnosticCopy": "Copier",
+  "helpDiagnosticShare": "Partager",
+  "helpDiagnosticCopied": "Rapport copié",
+  "helpLicenses": "Licences",
+  "helpTerms": "Conditions d'utilisation",
+  "helpPrivacy": "Confidentialité",
+  "helpVersion": "Version",
+  "helpFaqQ1": "Où sont mes vidéos ?",
+  "helpFaqA1": "Sur votre téléphone, à l'endroit où vous les avez enregistrées. GraceEdit ne les copie pas et ne les modifie pas.",
+  "helpFaqQ2": "Pourquoi aucun compte ?",
+  "helpFaqA2": "GraceEdit fonctionne hors connexion. Aucun réglage ni projet n'est envoyé quelque part.",
+  "helpFaqQ3": "Que se passe-t-il si je supprime un projet ?",
+  "helpFaqA3": "Il part dans la corbeille pendant 30 jours. Passé ce délai, il est supprimé définitivement.",
+  "helpFaqQ4": "Puis-je retrouver un média déplacé ?",
+  "helpFaqA4": "Oui : ouvrez le projet, puis « Reconnecter » et choisissez le fichier au nouvel emplacement.",
+  "helpFaqQ5": "Pourquoi l'export est-il plus lent sur certains téléphones ?",
+  "helpFaqA5": "Le rendu utilise l'encodeur de l'appareil. Choisissez la qualité Standard pour aller plus vite.",
+  "helpFaqQ6": "Mes vidéos sont-elles envoyées en ligne ?",
+  "helpFaqA6": "Non. Aucun envoi n'est effectué, ni pendant le montage ni pendant l'export.",
+  "termsBody": "GraceEdit est fourni tel quel, pour un usage personnel. Vous restez responsable des vidéos que vous montez et partagez. Aucune donnée n'est collectée.",
+  "privacyBody": "GraceEdit ne crée pas de compte, n'accède pas au réseau et n'envoie aucune donnée. Vos projets, réglages et vidéos restent sur votre appareil.",
+  "recoveryTitle": "Reprendre où vous en étiez ?",
+  "recoveryBody": "GraceEdit s'est fermé de façon inattendue. Votre travail a été récupéré.",
+  "recoveryResume": "Reprendre le projet",
+  "recoveryDiscard": "Ignorer",
+  "storageLowTitle": "Stockage faible",
+  "storageLowBody": "Il reste {free}. L'export peut échouer.",
+  "@storageLowBody": {
+    "placeholders": {
+      "free": {
+        "type": "String"
+      }
+    }
+  },
+  "storageFullTitle": "Plus assez d'espace sur le téléphone",
+  "storageFullBody": "GraceEdit ne peut plus enregistrer ni importer. Libérez de l'espace pour continuer.",
+  "storageManage": "Gérer",
+  "unsupportedTitle": "Format non pris en charge",
+  "unsupportedBody": "Ce fichier ne peut pas être lu sur cet appareil.",
+  "unsupportedChoose": "Choisir un autre fichier",
+  "permissionTitle": "Autoriser l'accès aux médias",
+  "permissionBody": "Le sélecteur du système n'est pas disponible sur cet appareil. GraceEdit a besoin de votre autorisation pour ouvrir vos vidéos.",
+  "permissionAllow": "Autoriser",
+  "permissionDeniedTitle": "Accès refusé",
+  "permissionDeniedBody": "Sans autorisation, GraceEdit ne peut pas ouvrir vos vidéos. Vous pouvez l'accorder dans les réglages du téléphone.",
+  "permissionOpenSettings": "Ouvrir les réglages",
+  "pickerUnavailable": "Le sélecteur de fichiers n'est pas disponible.",
+  "pickerUnavailableBody": "Fermez les applications qui pourraient l'occuper, puis réessayez.",
+  "errorGenericTitle": "Une erreur est survenue",
+  "errorGenericBody": "Vos projets sont intacts. Réessayez ; si le problème continue, redémarrez l'application.",
+  "semanticsBack": "Retour",
+  "semanticsClose": "Fermer",
+  "semanticsMore": "Plus d'options",
+  "semanticsSelected": "Sélectionné",
+  "semanticsUnselected": "Non sélectionné",
+  "semanticsPlayhead": "Tête de lecture",
+  "semanticsPosition": "Position {time}",
+  "@semanticsPosition": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "detailSeparator": " · ",
+  "navHome": "Accueil",
+  "navProjects": "Projets",
+  "navSettings": "Réglages",
+  "actionContinue": "Continuer",
+  "homeSaved": "Vos projets sont enregistrés automatiquement sur ce téléphone.",
+  "homeStorageManage": "Gérer",
+  "modifiedJustNow": "À l’instant",
+  "modifiedHoursAgo": "{count, plural, =1{il y a 1 h} other{il y a {count} h}}",
+  "modifiedMinutesAgo": "{count, plural, =1{il y a 1 min} other{il y a {count} min}}",
+  "unitHoursShort": "h",
+  "unitMinutesShort": "min",
+  "unitSecondsShort": "s",
+  "dateYesterday": "Hier",
+  "projectLineLabel": "{title}, {duration}, {when}",
+  "importDurationTotal": "Durée totale {duration}",
+  "importIgnoredCount": "{count, plural, =1{1 ignoré} other{{count} ignorés}}",
+  "importIgnoredNotice": "Le média non pris en charge sera ignoré.",
+  "importNoneUsable": "Aucun de ces médias ne peut être utilisé. Ajoutez-en d’autres pour continuer.",
+  "importOneVideo": "1 vidéo",
+  "importVideos": "{count} vidéos",
+  "welcomeGuarantees": "Garanties",
+  "homeEmptyCta": "Monter une vidéo",
+  "homeRecentCount": "Récents",
+  "importPicked": "Médias choisis",
+  "importDateLabel": "18 oct., 14:32",
+  "editorTimecodeNow": "Position actuelle",
+  "editorTools": "Outils",
+  "editorClipTools": "Outils du clip",
+  "editorSplitHint": "Placez la tête de lecture à l’intérieur du clip",
+  "editorPreciseTrim": "Rogner précisément",
+  "editorDuplicateClip": "Dupliquer le clip",
+  "editorAddToTimeline": "Ajouter à la timeline",
+  "editorRemoveClip": "Retirer ce clip",
+  "editorSavedAt": "Sauvegarde automatique",
+  "editorTextSelected": "Texte sélectionné",
+  "editorAudioSelected": "Musique sélectionnée",
+  "editorAutoCover": "Couverture automatique",
+  "editorCoverChosen": "Couverture choisie",
+  "editorLocked": "Lecture seule pendant l’export",
+  "trimSheetTitle": "Rogner précisément",
+  "trimStartLabel": "Début",
+  "trimEndLabel": "Fin",
+  "trimDone": "Terminé",
+  "textAddTitle": "Ajouter du texte",
+  "textEditTitle": "Modifier le texte",
+  "textInputLabel": "Texte",
+  "textFinish": "Terminé",
+  "textEmptyError": "Saisissez un texte",
+  "textColorTitle": "Couleur",
+  "textStyleTitle": "Style",
+  "textFontTitle": "Police",
+  "textBackgroundTitle": "Fond",
+  "textPresetPosition": "Position",
+  "textPresetAlignLeft": "Gauche",
+  "textPresetAlignCenter": "Centré",
+  "textPresetAlignRight": "Droite",
+  "textBackgroundNone": "Aucun",
+  "textBackgroundLight": "Léger",
+  "textBackgroundSolid": "Plein",
+  "textColorCream": "Ivoire",
+  "textColorInk": "Encre",
+  "textColorOrange": "Vermillon",
+  "textColorHoney": "Miel",
+  "textColorForest": "Forêt",
+  "textColorOcean": "Océan",
+  "audioMix": "Mixage",
+  "audioMuted": "Coupé",
+  "audioCustom": "Personnalisé",
+  "audioVolumeTitle": "Volume et fondus",
+  "audioWaveformHint": "Faites glisser pour déplacer, les poignées pour rogner.",
+  "adjustApplied": "Appliqué à {count} clips",
+  "adjustResetDone": "Réglages réinitialisés",
+  "formatFillHint": "Remplir : l’image est recadrée pour couvrir tout le cadre, sans bandes.",
+  "cropFree": "Libre",
+  "cropGridLabel": "Grille des tiers",
+  "coverImageInProjects": "Dans vos projets",
+  "coverSlideHint": "Faites glisser le cadre pour choisir l’image.",
+  "coverModifiedNow": "Modifié à l’instant",
+  "coverGalleryImage": "Image de la galerie",
+  "coverChooseAnother": "Choisir une autre image",
+  "coverUseVideoImage": "Utiliser une image de la vidéo",
+  "coverFromVideoLabel": "Image de la vidéo",
+  "exportEstimatedSize": "Taille estimée : environ {size}",
+  "exportStep": "Étape {current} sur {total}",
+  "exportInProgress": "Export en cours",
+  "exportGallerySaved": "Dans la galerie de votre téléphone",
+  "exportShare": "Partager",
+  "exportKeepEditing": "Continuer à modifier",
+  "exportRetry": "Réessayer",
+  "exportTryStandardShort": "Essayer en Standard · 720p",
+  "exportSafeFileDeleted": "Le fichier incomplet a été supprimé",
+  "exportNotLost": "Votre vidéo n’est pas perdue",
+  "exportErrorDetails": "Détails techniques",
+  "exportKeepInApp": "conservé dans GraceEdit",
+  "exportCancelMessage": "Export annulé. Votre projet n’est pas modifié.",
+  "exportSpaceNeededBody": "Il faut environ {needed}. Il reste {free}.",
+  "exportUnableRender": "Un problème est survenu pendant la création de la vidéo. Rien n’a été enregistré dans votre galerie.",
+  "exportUnableGallery": "La vidéo a été créée, mais n’a pas pu être ajoutée à la galerie.",
+  "exportInterruptedBody": "L’application a été fermée avant la fin. Votre projet est intact.",
+  "exportBattery": "Batterie très faible",
+  "projectsSortTitle": "Trier par",
+  "projectsViewToggleGrid": "Passer en affichage en grille",
+  "projectsViewToggleList": "Passer en affichage en liste",
+  "projectsCount": "{count, plural, =0{Aucun projet} =1{1 projet} other{{count} projets}}",
+  "projectsSelectAll": "Tout sélectionner",
+  "projectsDeselectAll": "Tout désélectionner",
+  "projectsDuplicate": "Dupliquer",
+  "projectsDelete": "Supprimer",
+  "projectsExporting": "Export en cours",
+  "projectsDuplicateDone": "Projet dupliqué",
+  "projectsDuplicateMany": "{count} projets dupliqués",
+  "projectsDeleted": "{count} projets supprimés",
+  "projectsDeleteSafeNote": "Vos vidéos d’origine et vos vidéos exportées ne sont jamais supprimées.",
+  "projectsTrashEmpty": "La corbeille est vide.",
+  "projectsTrashEmptyBody": "Les projets supprimés apparaissent ici pendant 30 jours.",
+  "trashDeletedAgo": "Supprimé il y a {days} j",
+  "trashPurgeIn": "Suppression dans {days} j",
+  "trashPurgeTomorrow": "Suppression demain",
+  "trashRestore": "Restaurer",
+  "trashDeleteForever": "Supprimer définitivement",
+  "trashPurgeAction": "Vider",
+  "trashRestored": "Projet restauré",
+  "missingProjectLabel": "Projet : {title}",
+  "missingCount": "{count, plural, =1{1 média est introuvable} other{{count} médias sont introuvables}}",
+  "missingExplain": "Il a peut-être été déplacé, renommé ou supprimé. Choisissez le fichier à utiliser à sa place.",
+  "missingUsedIn": "Utilisé dans {count} clips",
+  "missingReconnected": "Reconnecté",
+  "missingChangeFile": "Changer de fichier",
+  "missingRemaining": "{count, plural, =1{1 média reste à reconnecter.} other{{count} médias restent à reconnecter.}}",
+  "missingUseAnyway": "Utiliser quand même",
+  "missingFileUnreadable": "Ce fichier ne peut pas être lu",
+  "settingsValueAsk": "Demander",
+  "settingsValueTrash": "Corbeille",
+  "settingsThemeSheetTitle": "Thème",
+  "settingsLanguageSheetTitle": "Langue",
+  "settingsDeletionSheetTitle": "Suppression",
+  "storageGraceEditUses": "GraceEdit utilise",
+  "storageCacheThumbs": "Cache et miniatures",
+  "storageUnregistered": "Exports non enregistrés",
+  "storageTrash": "Corbeille",
+  "storageFreePhone": "Espace libre sur le téléphone",
+  "storageClear": "Vider",
+  "storageNothingToClear": "Rien à vider",
+  "storageCacheBody": "Recréés au besoin",
+  "storageLive": "Espace libre",
+  "helpAbout": "À propos",
+  "helpReplayCta": "Revoir la présentation",
+  "helpDiagnosticTitle": "Rapport de diagnostic",
+  "helpDiagnosticIntro": "Ce rapport aide à comprendre un problème. Il est créé sur votre téléphone et n’est jamais envoyé automatiquement.",
+  "helpContains": "Ce qu’il contient",
+  "helpNotContains": "Ce qu’il ne contient pas",
+  "helpDiagDevice": "Modèle de l’appareil et version d’Android",
+  "helpDiagVersion": "Version de GraceEdit",
+  "helpDiagSpace": "Espace libre et mémoire",
+  "helpDiagErrors": "Derniers événements d’erreur",
+  "helpDiagNoVideos": "Vos vidéos, vos photos, vos projets",
+  "helpDiagNoIdentity": "Votre nom, votre position",
+  "helpDiagCopy": "Copier le rapport",
+  "helpDiagShare": "Partager",
+  "helpDiagCopied": "Rapport copié",
+  "helpLicensesBody": "Police Inter (licence SIL OFL) · Flutter (licence BSD) · Media3 (licence Apache 2.0)",
+  "helpTermsBody": "GraceEdit est fourni tel quel, pour un usage personnel. Vous restez responsable des vidéos que vous montez et partagez. Aucune donnée n’est collectée.",
+  "helpPrivacyBody": "GraceEdit ne crée pas de compte, n’accède pas au réseau et n’envoie aucune donnée. Vos projets, réglages et vidéos restent sur votre appareil.",
+  "recoverySavedAgo": "Dernière sauvegarde {when}",
+  "recoveryLater": "Plus tard",
+  "recoverySafe": "GraceEdit s’est fermé de façon inattendue. Votre travail a été récupéré.",
+  "saveFailedSheetTitle": "Vos modifications ne sont pas enregistrées",
+  "saveFailedSheetBody": "Le téléphone n’a pas pu enregistrer le projet : il manque de l’espace. Ne fermez pas l’application avant d’avoir résolu le problème.",
+  "saveRetry": "Réessayer",
+  "saveFreeSpace": "Libérer de l’espace",
+  "storageFullSafe": "Vos projets sont intacts.",
+  "storageFullLater": "Plus tard",
+  "storageFullTrash": "Voir la corbeille",
+  "unsupportedOptionTitle": "Option non disponible",
+  "unsupportedOptionBody": "Votre téléphone ne peut pas exporter en 1080p. Choisissez Standard · 720p.",
+  "unsupportedChooseStandard": "Choisir Standard · 720p",
+  "unsupportedClose": "Fermer",
+  "notificationWhy": "GraceEdit peut afficher la progression et vous prévenir quand la vidéo est prête. L’export fonctionne aussi sans notification.",
+  "notificationAllow": "Autoriser les notifications",
+  "notificationLater": "Pas maintenant",
+  "permissionContinue": "Continuer",
+  "permissionChooseFiles": "Choisir des fichiers un par un",
+  "permissionSafe1": "Vous choisissez ce que GraceEdit peut voir.",
+  "permissionSafe2": "Rien n’est envoyé en ligne.",
+  "permissionDeniedPermission": "Sans cet accès, GraceEdit ne peut pas afficher vos vidéos. Autorisez-le dans les réglages ou choisissez les fichiers un par un.",
+  "commonView": "Voir",
+  "commonLater": "Plus tard",
+  "commonManage": "Gérer",
+  "commonThisClip": "Ce clip",
+  "commonWholeProject": "Tout le projet",
+  "commonOriginal": "Original",
+  "commonCompare": "Comparer",
+  "commonReset": "Réinitialiser",
+  "commonStep": "Étape {current} sur {total}",
+  "commonSeconds": "{seconds} s",
+  "commonMinutes": "{minutes} min",
+  "commonDays": "{days} j",
+  "commonPercent": "{percent} %",
+  "commonGigabytes": "{value} Go",
+  "commonMegabytes": "{value} Mo",
+  "commonSizeAndDuration": "{size} · {duration}",
+  "commonDone": "Terminé",
+  "commonCancel": "Annuler",
+  "commonRetry": "Réessayer",
+  "commonOpen": "Ouvrir",
+  "commonClose": "Fermer",
+  "commonBack": "Retour",
+  "commonNext": "Suivant",
+  "commonPrevious": "Précédent",
+  "commonPlay": "Lire",
+  "commonPause": "Pause",
+  "commonMore": "Plus",
+  "commonLess": "Moins",
+  "commonSaved": "Enregistré",
+  "commonSaving": "Enregistrement…",
+  "commonNotSaved": "Non enregistré",
+  "commonAuto": "Automatique",
+  "settingsAccessibility": "Accessibilité",
+  "@settingsAccessibility": {
+    "description": ""
+  },
+  "settingsMotionHint": "Suit le réglage de l'appareil",
+  "@settingsMotionHint": {
+    "description": ""
+  },
+  "settingsStorageHelp": "Stockage et aide",
+  "@settingsStorageHelp": {
+    "description": ""
+  },
+  "settingsStorageCache": "Stockage et cache",
+  "@settingsStorageCache": {
+    "description": ""
+  }
+}

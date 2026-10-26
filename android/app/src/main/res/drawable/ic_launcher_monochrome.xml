@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Couche monochrome de l'icône adaptative (Android 13+).
+     Tracé exact de design/icone-application/icone_monochrome.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M66.7167,35.8583 A22.1667,22.1667 0 1 0 76.1667,54"
+        android:strokeColor="#000000"
+        android:strokeWidth="11.6667"
+        android:strokeLineCap="butt"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M70.3333,50.5 H81.7667 L82,54 H70.3333 Z"
+        android:fillColor="#000000" />
+    <path
+        android:pathData="M55.1667,50.5 H66.8333 V59.8333 H55.1667 Z"
+        android:fillColor="#000000" />
+</vector>

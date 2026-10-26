@@ -1,43 +1,27 @@
-/// Simple (beginner) video editor: real import, video preview,
-/// timeline with thumbnails, trim/split/delete, text, undo/redo,
-/// autosave, export profile picker.
-library;
-
-import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:video_player/video_player.dart';
+import 'package:uuid/uuid.dart';
 
-import '../../core/commands/commands.dart';
-import '../../core/models/grace_project.dart';
-import '../../core/platform/capabilities.dart';
-import '../../core/services/import_service.dart';
-import '../../core/services/thumbnails.dart';
+import '../../core/l10n/generated/app_localizations.dart';
+import '../../core/models/project.dart';
 import '../../core/state/providers.dart';
-import '../../theme/tokens.dart';
-import '../library/thumb_widget.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/theme/tokens.dart';
+import '../../core/ui/buttons.dart';
+import '../../core/ui/controls.dart';
+import '../../core/ui/messages.dart';
+import '../../core/ui/sheets.dart';
+import '../../core/ui/thumb.dart';
+import '../../core/utils/formatters.dart';
+import '../import/import_flow.dart';
+import 'editor_controller.dart';
+import 'editor_preview.dart';
+import 'timeline.dart';
 
-/// Builds a 4x5 color matrix for brightness/contrast/saturation adjustments.
-/// brightness: -1..1, contrast/saturation: multipliers around 1.
-List<double> graceColorMatrix(double brightness, double contrast, double saturation) {
-  final b = brightness * 255.0;
-  // Saturation matrix (luminance weights) scaled by [saturation].
-  final s = saturation;
-  final sr = (1 - s) * 0.2126, sg = (1 - s) * 0.7152, sb = (1 - s) * 0.0722;
-  // Combined: first saturation, then contrast + brightness offset.
-  final List<double> m = [
-    (sr + s) * contrast, sg * contrast, sb * contrast, 0.0, b,
-    sr * contrast, (sg + s) * contrast, sb * contrast, 0.0, b,
-    sr * contrast, sg * contrast, (sb + s) * contrast, 0.0, b,
-    0.0, 0.0, 0.0, 1.0, 0.0,
-  ];
-  return m;
-}
-
-final importServiceProvider =
-    Provider<ImportService>((ref) => ImportService());
+const _uuid = Uuid();
 
 class EditorScreen extends ConsumerStatefulWidget {
   const EditorScreen({super.key, required this.projectId});
@@ -48,1355 +32,1473 @@ class EditorScreen extends ConsumerStatefulWidget {
 }
 
 class _EditorScreenState extends ConsumerState<EditorScreen> {
-  bool _saving = false;
-  bool _importing = false;
-  String? _notice;
-  ExportProfile? _profile;
-  int? _selectedClipIndex;
-  bool _booting = true;
-  String? _bootError;
-
-  /// The clip the tools act on. Falls back to the first clip so actions and the
-  /// preview keep working right after an import without an extra tap.
-  int? get _activeClipIndex {
-    final session = ref.read(editorSessionProvider);
-    if (session == null || session.project.clips.isEmpty) return null;
-    final i = _selectedClipIndex;
-    if (i == null || i < 0 || i >= session.project.clips.length) return 0;
-    return i;
-  }
+  EditorController? _controller;
 
   @override
   void initState() {
     super.initState();
-    _ensureSession();
+    final store = ref.read(storeProvider);
+    final project = store.projectById(widget.projectId);
+    if (project != null) {
+      _controller = EditorController(store: store, project: project);
+    }
   }
 
-  /// Reload the project from disk when the in-memory session is missing
-  /// or targets another project (relaunch, deep link). Undo history
-  /// restarts fresh — persisted content is authoritative.
-  Future<void> _ensureSession() async {
-    final current = ref.read(editorSessionProvider);
-    if (current != null && current.project.id == widget.projectId) {
-      if (mounted) setState(() => _booting = false);
+  @override
+  void dispose() {
+    final controller = _controller;
+    if (controller != null) {
+      controller.flush();
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  EditorController get controller => _controller!;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    if (controller == null) {
+      return const Scaffold(body: SizedBox.shrink());
+    }
+    final l10n = AppLocalizations.of(context);
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final project = controller.project;
+        final landscape =
+            MediaQuery.sizeOf(context).width >
+            MediaQuery.sizeOf(context).height;
+        final wide = MediaQuery.sizeOf(context).width >= 600;
+        return Scaffold(
+          backgroundColor: context.grace.background,
+          body: SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                _EditorTopBar(controller: controller, l10n: l10n),
+                if (controller.saveState == SaveState.failed)
+                  _SaveFailedBanner(
+                    onRetry: controller.retrySave,
+                    onFreeSpace: () => context.push('/settings/storage'),
+                  ),
+                Expanded(
+                  child: landscape || wide
+                      ? _LandscapeBody(
+                          controller: controller,
+                          onEditText: _editText,
+                          onAddMedia: _addMedia,
+                          onReconnect: () =>
+                              context.push('/projects/${project.id}/relink'),
+                        )
+                      : _PortraitBody(
+                          controller: controller,
+                          onEditText: _editText,
+                          onAddMedia: _addMedia,
+                          onReconnect: () =>
+                              context.push('/projects/${project.id}/relink'),
+                        ),
+                ),
+                _EditorToolbar(
+                  controller: controller,
+                  onAdd: _addMedia,
+                  onAudio: _showAudioMix,
+                  onText: _addText,
+                  onAdjust: _showAdjust,
+                  onFormat: _showFormat,
+                  onCover: _showCover,
+                  onSplit: _split,
+                  onVolume: _showVolume,
+                  onCrop: _showCrop,
+                  onDelete: _deleteSelected,
+                  onMore: _showMore,
+                  onBack: controller.clearSelection,
+                  onEditText: () {
+                    final item = controller.selectedText;
+                    if (item != null) _editText(item);
+                  },
+                  onStyle: () => _showStyle(tab: 0),
+                  onColor: () => _showStyle(tab: 2),
+                  onTextMore: _showTextMore,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------- actions
+
+  Future<void> _addMedia() async {
+    final result = await ref.read(mediaServiceProvider).pickVideos();
+    if (!mounted) return;
+    if (result.failure != null) {
+      GraceToast.show(
+        context,
+        AppLocalizations.of(context).pickerUnavailable,
+        isError: true,
+      );
       return;
     }
-    try {
-      final loaded =
-          await ref.read(projectRepositoryProvider).load(widget.projectId);
-      if (!mounted) return;
-      if (loaded == null) {
-        setState(() {
-          _booting = false;
-          _bootError = 'Projet introuvable — il a peut-être été supprimé.';
-        });
-        return;
-      }
-      ref.read(editorSessionProvider.notifier).state = EditorSession(loaded);
-      setState(() => _booting = false);
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _booting = false;
-          _bootError = 'Ouverture impossible — stockage illisible.';
-        });
-      }
-    }
+    if (result.media.isEmpty) return;
+    final refs = result.media.map(mediaRefFromPicked).toList();
+    final usable = refs
+        .where((m) => !m.unsupported && m.kind == MediaKind.video)
+        .toList();
+    if (usable.isEmpty) return;
+    final project = controller.project;
+    controller.replaceProject(
+      project.copyWith(
+        media: [...project.media, ...refs],
+        clips: [
+          ...project.clips,
+          for (final media in usable)
+            Clip(
+              id: _uuid.v4(),
+              mediaId: media.id,
+              trimStartMs: 0,
+              trimEndMs: media.durationMs > 0 ? media.durationMs : 3000,
+            ),
+        ],
+      ),
+    );
   }
 
-  EditorSession? get _session => ref.watch(editorSessionProvider);
-
-  Future<void> _persist() async {
-    final s = ref.read(editorSessionProvider);
-    if (s == null) return;
-    setState(() => _saving = true);
-    try {
-      await ref.read(projectRepositoryProvider).save(s.project);
-      await ref
-          .read(thumbnailServiceProvider)
-          .invalidateAsset('project-${s.project.id}');
-      await ref.read(projectsProvider.notifier).refresh();
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+  void _addText() {
+    final item = controller.addText();
+    _editText(item, isNew: true);
   }
 
-  void _exec(ProjectCommand cmd) {
-    final s = ref.read(editorSessionProvider);
-    if (s == null) return;
-    setState(() => s.commands.execute(s.project, cmd));
-    ref.read(projectRepositoryProvider).markDirty(s.project.id);
-    _persist();
-  }
-
-  Future<void> _importMenu() async {
-    final choice = await showModalBottomSheet<String>(
+  Future<void> _editText(TextItem item, {bool isNew = false}) async {
+    final l10n = AppLocalizations.of(context);
+    final textController = TextEditingController(text: item.text);
+    FocusNode? focus;
+    var preset = item.preset;
+    var value = item;
+    final saved = await showGraceSheet<bool>(
       context: context,
-      builder: (c) => SafeArea(
+      editorPanel: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          focus ??= FocusNode();
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isNew ? l10n.textAddTitle : l10n.textEditTitle,
+                  style: GraceType.sheetTitle,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: textController,
+                  focusNode: focus,
+                  autofocus: true,
+                  maxLines: 3,
+                  maxLength: 120,
+                  style: GraceType.body,
+                  decoration: InputDecoration(
+                    labelText: l10n.textInputLabel,
+                    hintText: l10n.textPlaceholder,
+                    counterText: '',
+                  ),
+                  onChanged: (v) =>
+                      setSheetState(() => value = value.copyWith(text: v)),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final p in TextPreset.values)
+                      ChoiceChip(
+                        label: Text(switch (p) {
+                          TextPreset.title => l10n.textPresetTitle,
+                          TextPreset.subtitle => l10n.textPresetSubtitle,
+                          TextPreset.caption => l10n.textPresetCaption,
+                        }),
+                        selected: preset == p,
+                        onSelected: (_) => setSheetState(() {
+                          preset = p;
+                          value = value.copyWith(preset: p);
+                        }),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    GraceIconAction(
+                      icon: Icons.close,
+                      semanticLabel: l10n.actionClose,
+                      onPressed: () => Navigator.of(sheetContext).pop(false),
+                    ),
+                    const Spacer(),
+                    if (!isNew)
+                      GraceIconAction(
+                        icon: Icons.delete_outline,
+                        semanticLabel: l10n.actionDelete,
+                        onPressed: () {
+                          controller.removeText(item.id);
+                          Navigator.of(sheetContext).pop(false);
+                        },
+                      ),
+                    GracePrimaryButton(
+                      label: l10n.commonDone,
+                      expanded: false,
+                      height: 48,
+                      onPressed: textController.text.trim().isEmpty
+                          ? null
+                          : () => Navigator.of(sheetContext).pop(true),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    if (saved != true) {
+      if (isNew) controller.removeText(item.id);
+      return;
+    }
+    value = value.copyWith(text: textController.text.trim(), preset: preset);
+    controller.updateText(value);
+    textController.dispose();
+    focus?.dispose();
+  }
+
+  Future<void> _showStyle({int tab = 0}) async {
+    final l10n = AppLocalizations.of(context);
+    final item = controller.selectedText;
+    if (item == null) return;
+    var value = item;
+    await showGraceSheet<void>(
+      context: context,
+      editorPanel: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final p = context.grace;
+          Widget content;
+          if (tab == 0) {
+            content = Column(
+              children: [
+                GraceSliderRow(
+                  label: l10n.textSize,
+                  value: value.size,
+                  min: 12,
+                  max: 72,
+                  divisions: 60,
+                  display: '${value.size.round()}',
+                  onChanged: (v) {
+                    value = value.copyWith(size: v);
+                    controller.updateText(value);
+                    setSheetState(() {});
+                  },
+                ),
+                GraceSliderRow(
+                  label: l10n.textOpacity,
+                  value: value.opacity,
+                  min: 0,
+                  max: 100,
+                  divisions: 20,
+                  display: formatPercent(value.opacity),
+                  onChanged: (v) {
+                    value = value.copyWith(opacity: v);
+                    controller.updateText(value);
+                    setSheetState(() {});
+                  },
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(l10n.textBackgroundOn, style: GraceType.body),
+                  value: value.background,
+                  onChanged: (v) {
+                    value = value.copyWith(background: v);
+                    controller.updateText(value);
+                    setSheetState(() {});
+                  },
+                ),
+              ],
+            );
+          } else if (tab == 1) {
+            content = Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final preset in TextPreset.values)
+                  ChoiceChip(
+                    label: Text(switch (preset) {
+                      TextPreset.title => l10n.textPresetTitle,
+                      TextPreset.subtitle => l10n.textPresetSubtitle,
+                      TextPreset.caption => l10n.textPresetCaption,
+                    }),
+                    selected: value.preset == preset,
+                    onSelected: (_) {
+                      value = value.copyWith(preset: preset);
+                      controller.updateText(value);
+                      setSheetState(() {});
+                    },
+                  ),
+                for (final align in TextAlign.values)
+                  ChoiceChip(
+                    label: Text(switch (align) {
+                      TextAlign.left => l10n.textPresetAlignLeft,
+                      TextAlign.right => l10n.textPresetAlignRight,
+                      _ => l10n.textPresetAlignCenter,
+                    }),
+                    selected: value.align == align,
+                    onSelected: (_) {
+                      value = value.copyWith(align: align);
+                      controller.updateText(value);
+                      setSheetState(() {});
+                    },
+                  ),
+              ],
+            );
+          } else if (tab == 2) {
+            const colors = [
+              (0xFFF6F2EA, 'textColorCream'),
+              (0xFF14151A, 'textColorInk'),
+              (0xFFE2542B, 'textColorOrange'),
+              (0xFFE5B84B, 'textColorHoney'),
+              (0xFF2F6B4F, 'textColorForest'),
+              (0xFF2C5D8A, 'textColorOcean'),
+            ];
+            content = Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final entry in colors)
+                  ColorDot(
+                    color: Color(entry.$1),
+                    selected: value.color == entry.$1,
+                    semanticLabel: switch (entry.$2) {
+                      'textColorCream' => l10n.textColorCream,
+                      'textColorInk' => l10n.textColorInk,
+                      'textColorOrange' => l10n.textColorOrange,
+                      'textColorHoney' => l10n.textColorHoney,
+                      'textColorForest' => l10n.textColorForest,
+                      _ => l10n.textColorOcean,
+                    },
+                    onTap: () {
+                      value = value.copyWith(color: entry.$1);
+                      controller.updateText(value);
+                      setSheetState(() {});
+                    },
+                  ),
+              ],
+            );
+          } else {
+            content = Column(
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(l10n.textBackgroundOn, style: GraceType.body),
+                  value: value.background,
+                  onChanged: (v) {
+                    value = value.copyWith(background: v);
+                    controller.updateText(value);
+                    setSheetState(() {});
+                  },
+                ),
+              ],
+            );
+          }
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.textStyleTitle, style: GraceType.sheetTitle),
+                const SizedBox(height: 16),
+                GraceSegmented(
+                  segments: [
+                    GraceSegment(label: l10n.textTabStyle),
+                    GraceSegment(label: l10n.textTabFont),
+                    GraceSegment(label: l10n.textTabColor),
+                    GraceSegment(label: l10n.textTabBackground),
+                  ],
+                  selected: tab,
+                  onSelected: (i) => setSheetState(() => tab = i),
+                ),
+                const SizedBox(height: 20),
+                content,
+                const SizedBox(height: 8),
+                Text(
+                  l10n.textMoveHint,
+                  style: GraceType.caption.copyWith(color: p.secondary),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    controller.textStyleTab = tab;
+  }
+
+  Future<void> _showAudioMix() async {
+    final l10n = AppLocalizations.of(context);
+    await showGraceSheet<void>(
+      context: context,
+      editorPanel: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final project = controller.project;
+          final p = context.grace;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.audioMix, style: GraceType.sheetTitle),
+                const SizedBox(height: 16),
+                GraceSliderRow(
+                  label: l10n.audioVideoSound,
+                  value: project.videoVolume,
+                  min: 0,
+                  max: 100,
+                  divisions: 20,
+                  display: formatPercent(project.videoVolume),
+                  onChanged: (v) {
+                    controller.setVideoVolume(v);
+                    setSheetState(() {});
+                  },
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(l10n.audioMusic, style: GraceType.body),
+                    ),
+                    GraceIconAction(
+                      icon: project.videoVolume == 0
+                          ? Icons.volume_off
+                          : Icons.volume_up,
+                      semanticLabel: project.videoVolume == 0
+                          ? l10n.audioUnmute
+                          : l10n.audioMute,
+                      onPressed: () {
+                        controller.setVideoVolume(
+                          project.videoVolume == 0 ? 100 : 0,
+                        );
+                        setSheetState(() {});
+                      },
+                    ),
+                  ],
+                ),
+                for (final audio in project.audios)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.music_note),
+                    title: Text(
+                      project.mediaById(audio.mediaId)?.name ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GraceType.bodyCompact,
+                    ),
+                    subtitle: Text(
+                      formatDuration(audio.durationMs),
+                      style: GraceType.caption.copyWith(color: p.secondary),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close),
+                      tooltip: l10n.actionRemove,
+                      onPressed: () {
+                        controller.removeAudio(audio.id);
+                        setSheetState(() {});
+                      },
+                    ),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      controller.selectAudio(audio.id);
+                      _showAudioDetail();
+                    },
+                  ),
+                const SizedBox(height: 8),
+                GraceOutlineButton(
+                  label: l10n.audioAddMusic,
+                  icon: Icons.library_music_outlined,
+                  onPressed: () async {
+                    final picked = await ref
+                        .read(mediaServiceProvider)
+                        .pickAudio();
+                    if (!mounted) return;
+                    if (picked.failure != null || picked.media.isEmpty) return;
+                    final media = mediaRefFromPicked(picked.media.first);
+                    controller.addAudio(media);
+                    if (!mounted || !sheetContext.mounted) return;
+                    Navigator.of(sheetContext).pop();
+                    _showAudioDetail();
+                  },
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  l10n.audioMusicHint,
+                  style: GraceType.caption.copyWith(color: p.secondary),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showAudioDetail() async {
+    final l10n = AppLocalizations.of(context);
+    final audio = controller.selectedAudio;
+    if (audio == null) return;
+    await showGraceSheet<void>(
+      context: context,
+      editorPanel: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final p = context.grace;
+          final current = controller.selectedAudio ?? audio;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.audioVolumeTitle, style: GraceType.sheetTitle),
+                const SizedBox(height: 16),
+                GraceSliderRow(
+                  label: l10n.audioVolumeLabel,
+                  value: current.volume,
+                  min: 0,
+                  max: 100,
+                  divisions: 20,
+                  display: formatPercent(current.volume),
+                  onChanged: (v) {
+                    controller.updateAudio(current.copyWith(volume: v));
+                    setSheetState(() {});
+                  },
+                ),
+                GraceSliderRow(
+                  label: l10n.audioFadeIn,
+                  value: current.fadeInMs / 1000,
+                  min: 0,
+                  max: 10,
+                  divisions: 100,
+                  display: formatSeconds(current.fadeInMs),
+                  onChanged: (v) {
+                    final fade = (v * 1000).round();
+                    if (fade + current.fadeOutMs > current.durationMs) return;
+                    controller.updateAudio(current.copyWith(fadeInMs: fade));
+                    setSheetState(() {});
+                  },
+                ),
+                GraceSliderRow(
+                  label: l10n.audioFadeOut,
+                  value: current.fadeOutMs / 1000,
+                  min: 0,
+                  max: 10,
+                  divisions: 100,
+                  display: formatSeconds(current.fadeOutMs),
+                  onChanged: (v) {
+                    final fade = (v * 1000).round();
+                    if (fade + current.fadeInMs > current.durationMs) return;
+                    controller.updateAudio(current.copyWith(fadeOutMs: fade));
+                    setSheetState(() {});
+                  },
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    GraceOutlineButton(
+                      label: l10n.actionDelete,
+                      icon: Icons.delete_outline,
+                      destructive: true,
+                      expanded: false,
+                      onPressed: () {
+                        controller.removeAudio(current.id);
+                        Navigator.of(sheetContext).pop();
+                      },
+                    ),
+                    const Spacer(),
+                    Text(
+                      formatDuration(current.durationMs),
+                      style: GraceType.secondary.copyWith(color: p.secondary),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showVolume() async {
+    final l10n = AppLocalizations.of(context);
+    final clip = controller.selectedClip;
+    if (clip == null) return;
+    await showGraceSheet<void>(
+      context: context,
+      editorPanel: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final current = controller.selectedClip ?? clip;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.editorVolume, style: GraceType.sheetTitle),
+                const SizedBox(height: 16),
+                GraceSliderRow(
+                  label: l10n.audioVolumeLabel,
+                  value: current.volume,
+                  min: 0,
+                  max: 100,
+                  divisions: 20,
+                  display: formatPercent(current.volume),
+                  onChanged: (v) {
+                    controller.setClipVolume(current.id, v);
+                    setSheetState(() {});
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showAdjust() async {
+    final l10n = AppLocalizations.of(context);
+    var scopeAll = false;
+    final clip = controller.selectedClip;
+    if (clip == null) return;
+    controller.togglePanel(EditorPanel.adjust);
+    await showGraceSheet<void>(
+      context: context,
+      editorPanel: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final current = controller.selectedClip ?? clip;
+          final value = current.adjustments;
+          void apply(Adjustments a) {
+            if (scopeAll) {
+              controller.setAllAdjustments(a);
+            } else {
+              controller.setClipAdjustments(current.id, a);
+            }
+            setSheetState(() {});
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.adjustTitle, style: GraceType.sheetTitle),
+                const SizedBox(height: 16),
+                GraceSliderRow(
+                  label: l10n.adjustBrightness,
+                  value: value.brightness,
+                  min: -100,
+                  max: 100,
+                  divisions: 40,
+                  bipolar: true,
+                  display: '${value.brightness.round()}',
+                  onChanged: (v) => apply(value.copyWith(brightness: v)),
+                ),
+                GraceSliderRow(
+                  label: l10n.adjustContrast,
+                  value: value.contrast,
+                  min: -100,
+                  max: 100,
+                  divisions: 40,
+                  bipolar: true,
+                  display: '${value.contrast.round()}',
+                  onChanged: (v) => apply(value.copyWith(contrast: v)),
+                ),
+                GraceSliderRow(
+                  label: l10n.adjustSaturation,
+                  value: value.saturation,
+                  min: -100,
+                  max: 100,
+                  divisions: 40,
+                  bipolar: true,
+                  display: '${value.saturation.round()}',
+                  onChanged: (v) => apply(value.copyWith(saturation: v)),
+                ),
+                const SizedBox(height: 8),
+                GraceSegmented(
+                  segments: [
+                    GraceSegment(label: l10n.adjustScopeClip),
+                    GraceSegment(label: l10n.adjustScopeAll),
+                  ],
+                  selected: scopeAll ? 1 : 0,
+                  onSelected: (i) => setSheetState(() => scopeAll = i == 1),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GraceOutlineButton(
+                        label: l10n.adjustCompare,
+                        height: 44,
+                        onPressed: () => controller.setCompareOriginal(true),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: GraceOutlineButton(
+                        label: l10n.adjustReset,
+                        height: 44,
+                        onPressed: () => apply(const Adjustments()),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.adjustCompareHint,
+                  style: GraceType.caption.copyWith(
+                    color: context.grace.secondary,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    controller.setCompareOriginal(false);
+    controller.togglePanel(EditorPanel.adjust);
+  }
+
+  Future<void> _showFormat() async {
+    final l10n = AppLocalizations.of(context);
+    await showGraceSheet<void>(
+      context: context,
+      editorPanel: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final project = controller.project;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.formatTitle, style: GraceType.sheetTitle),
+                const SizedBox(height: 16),
+                RadioGroup<ProjectFormat>(
+                  groupValue: project.format,
+                  onChanged: (v) {
+                    if (v == null) return;
+                    controller.setFormat(v);
+                    setSheetState(() {});
+                  },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final format in ProjectFormat.values)
+                        RadioListTile<ProjectFormat>(
+                          contentPadding: EdgeInsets.zero,
+                          value: format,
+                          title: Text(switch (format) {
+                            ProjectFormat.vertical => l10n.formatVertical,
+                            ProjectFormat.square => l10n.formatSquare,
+                            ProjectFormat.horizontal => l10n.formatHorizontal,
+                            ProjectFormat.portrait => l10n.formatPortrait,
+                          }, style: GraceType.body),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(l10n.formatFitMode, style: GraceType.subtitle),
+                const SizedBox(height: 8),
+                GraceSegmented(
+                  segments: [
+                    GraceSegment(label: l10n.formatFill),
+                    GraceSegment(label: l10n.formatFit),
+                  ],
+                  selected: project.fitMode == FitMode.fill ? 0 : 1,
+                  onSelected: (i) {
+                    controller.setFitMode(i == 0 ? FitMode.fill : FitMode.fit);
+                    setSheetState(() {});
+                  },
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.formatFitHint,
+                  style: GraceType.caption.copyWith(
+                    color: context.grace.secondary,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showCrop() async {
+    final l10n = AppLocalizations.of(context);
+    final clip = controller.selectedClip;
+    if (clip == null) return;
+    var value = clip;
+    controller.beginGesture();
+    final done = await showGeneralDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black,
+      pageBuilder: (dialogContext, _, _) => StatefulBuilder(
+        builder: (context, setDialogState) => Scaffold(
+          backgroundColor: GraceColors.preview,
+          body: SafeArea(
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    GraceIconAction(
+                      icon: Icons.close,
+                      semanticLabel: l10n.actionClose,
+                      color: GraceColors.ivory,
+                      onPressed: () => Navigator.of(dialogContext).pop(false),
+                    ),
+                    const Spacer(),
+                    Text(
+                      l10n.cropTitle,
+                      style: GraceType.barTitle.copyWith(
+                        color: GraceColors.ivory,
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                      child: Text(
+                        l10n.commonDone,
+                        style: GraceType.bodyMedium.copyWith(
+                          color: GraceColors.ivory,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                Expanded(
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: controller.project.format.ratio,
+                      child: _CropSurface(controller: controller, value: value),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _CropAction(
+                            icon: Icons.rotate_right,
+                            label: l10n.cropRotate,
+                            onTap: () {
+                              value = value.copyWith(
+                                rotation: (value.rotation + 90) % 360,
+                              );
+                              controller.setClipTransform(
+                                value.id,
+                                rotation: value.rotation,
+                              );
+                              setDialogState(() {});
+                            },
+                          ),
+                          _CropAction(
+                            icon: Icons.flip,
+                            label: l10n.cropMirror,
+                            onTap: () {
+                              value = value.copyWith(mirrored: !value.mirrored);
+                              controller.setClipTransform(
+                                value.id,
+                                mirrored: value.mirrored,
+                              );
+                              setDialogState(() {});
+                            },
+                          ),
+                          _CropAction(
+                            icon: Icons.restart_alt,
+                            label: l10n.cropReset,
+                            onTap: () {
+                              value = value.copyWith(
+                                rotation: 0,
+                                mirrored: false,
+                                straighten: 0,
+                              );
+                              controller.setClipTransform(
+                                value.id,
+                                rotation: 0,
+                                mirrored: false,
+                                straighten: 0,
+                              );
+                              setDialogState(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                      GraceSliderRow(
+                        label: l10n.cropStraighten,
+                        value: value.straighten,
+                        min: -45,
+                        max: 45,
+                        divisions: 90,
+                        bipolar: true,
+                        display: '${value.straighten.round()}°',
+                        onChanged: (v) {
+                          value = value.copyWith(straighten: v);
+                          controller.setClipTransform(value.id, straighten: v);
+                          setDialogState(() {});
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (done == true) controller.endGesture();
+  }
+
+  Future<void> _showCover() async {
+    final l10n = AppLocalizations.of(context);
+    await showGraceSheet<void>(
+      context: context,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final project = controller.project;
+          final media = project.firstVideo;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.coverTitle, style: GraceType.sheetTitle),
+                const SizedBox(height: 12),
+                Text(
+                  project.coverSource == CoverSource.automatic
+                      ? l10n.coverAutoBody
+                      : l10n.editorCoverChosen,
+                  style: GraceType.secondary.copyWith(
+                    color: context.grace.secondary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (media != null)
+                  SizedBox(
+                    height: 64,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: 8,
+                      separatorBuilder: (_, _) => const SizedBox(width: 6),
+                      itemBuilder: (context, i) {
+                        final time = (project.durationMs * (i + 1) / 9).round();
+                        final selected =
+                            project.coverSource == CoverSource.videoFrame &&
+                            (project.coverTimeMs - time).abs() < 250;
+                        return GestureDetector(
+                          onTap: () {
+                            controller.setCover(
+                              source: CoverSource.videoFrame,
+                              timeMs: time,
+                            );
+                            setSheetState(() {});
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: selected
+                                    ? GraceColors.accent
+                                    : Colors.transparent,
+                                width: 2,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.all(2),
+                            child: GraceThumb(
+                              media: media,
+                              timeMs: time,
+                              width: 96,
+                              height: 54,
+                              showDuration: false,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                GraceOutlineButton(
+                  label: l10n.coverFromGallery,
+                  icon: Icons.photo_library_outlined,
+                  onPressed: () async {
+                    final service = ref.read(mediaServiceProvider);
+                    final picked = await service.pickImage();
+                    if (picked.media.isEmpty) return;
+                    final path = await service.copyCoverImage(
+                      picked.media.first,
+                    );
+                    if (path == null) return;
+                    controller.setCover(
+                      source: CoverSource.gallery,
+                      path: path,
+                    );
+                    if (mounted) setSheetState(() {});
+                  },
+                ),
+                const SizedBox(height: 8),
+                GraceTextAction(
+                  label: l10n.coverReset,
+                  onPressed: () {
+                    controller.setCover(source: CoverSource.automatic);
+                    setSheetState(() {});
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showTrim() async {
+    final l10n = AppLocalizations.of(context);
+    final clip = controller.selectedClip;
+    if (clip == null) return;
+    controller.beginGesture();
+    await showGraceSheet<void>(
+      context: context,
+      editorPanel: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final current = controller.selectedClip ?? clip;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.trimSheetTitle, style: GraceType.sheetTitle),
+                const SizedBox(height: 16),
+                _PreciseRow(
+                  label: l10n.trimStartLabel,
+                  value: formatTrimTime(current.trimStartMs),
+                  onMinus: () {
+                    controller.trimClip(
+                      current.id,
+                      start: current.trimStartMs - 100,
+                    );
+                    setSheetState(() {});
+                  },
+                  onPlus: () {
+                    controller.trimClip(
+                      current.id,
+                      start: current.trimStartMs + 100,
+                    );
+                    setSheetState(() {});
+                  },
+                ),
+                _PreciseRow(
+                  label: l10n.trimEndLabel,
+                  value: formatTrimTime(current.trimEndMs),
+                  onMinus: () {
+                    controller.trimClip(
+                      current.id,
+                      end: current.trimEndMs - 100,
+                    );
+                    setSheetState(() {});
+                  },
+                  onPlus: () {
+                    controller.trimClip(
+                      current.id,
+                      end: current.trimEndMs + 100,
+                    );
+                    setSheetState(() {});
+                  },
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Text(
+                      l10n.trimDurationLabel(
+                        formatDuration(current.durationMs),
+                      ),
+                      style: GraceType.secondary.copyWith(
+                        color: context.grace.secondary,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      l10n.trimMinimum,
+                      style: GraceType.caption.copyWith(
+                        color: context.grace.secondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    controller.endGesture();
+  }
+
+  Future<void> _showMore() async {
+    final l10n = AppLocalizations.of(context);
+    final clip = controller.selectedClip;
+    if (clip == null) return;
+    await showGraceSheet<void>(
+      context: context,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.video_library_outlined),
-              title: const Text('Vidéo de la galerie'),
-              onTap: () => Navigator.pop(c, 'video_gallery'),
+              leading: const Icon(Icons.content_copy),
+              title: Text(l10n.editorDuplicateClip),
+              onTap: () {
+                controller.duplicateClip(clip.id);
+                Navigator.of(sheetContext).pop();
+              },
             ),
             ListTile(
-              leading: const Icon(Icons.videocam_outlined),
-              title: const Text('Filmer une vidéo'),
-              onTap: () => Navigator.pop(c, 'video_camera'),
+              leading: const Icon(Icons.content_cut),
+              title: Text(l10n.editorPreciseTrim),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _showTrim();
+              },
             ),
-            const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.perm_media_outlined),
-              title: const Text('Mes vidéos importées'),
-              subtitle: const Text('Voir et ranger les fichiers du téléphone'),
-              onTap: () => Navigator.pop(c, 'library'),
+              leading: Icon(Icons.delete_outline, color: context.grace.error),
+              title: Text(
+                l10n.editorRemoveClip,
+                style: TextStyle(color: context.grace.error),
+              ),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _deleteSelected();
+              },
             ),
           ],
         ),
       ),
     );
-    if (choice == null) return;
-    if (choice == 'library') {
-      if (mounted) context.push('/assets');
+  }
+
+  /// EDT-03 : « Plus » du texte — Dupliquer et Aligner.
+  Future<void> _showTextMore() async {
+    final l10n = AppLocalizations.of(context);
+    final item = controller.selectedText;
+    if (item == null) return;
+    await showGraceSheet<TextAlign>(
+      context: context,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.content_copy),
+              title: Text(l10n.actionDuplicate),
+              onTap: () {
+                controller.duplicateText(item.id);
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.format_align_left),
+              title: Text(l10n.textPresetAlignLeft),
+              onTap: () => Navigator.of(sheetContext).pop(TextAlign.left),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.format_align_center),
+              title: Text(l10n.textPresetAlignCenter),
+              onTap: () => Navigator.of(sheetContext).pop(TextAlign.center),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.format_align_right),
+              title: Text(l10n.textPresetAlignRight),
+              onTap: () => Navigator.of(sheetContext).pop(TextAlign.right),
+            ),
+          ],
+        ),
+      ),
+    ).then((value) {
+      if (value is! TextAlign || !mounted) return;
+      controller.updateText(item.copyWith(align: value));
+    });
+  }
+
+  void _split() {
+    if (!controller.splitSelectedClip()) {
+      GraceToast.show(context, AppLocalizations.of(context).editorSplitHint);
       return;
     }
-    // Ask for the camera only when the user actually films — asking up front
-    // for a library permission the system picker does not need is scary and
-    // pointless.
-    if (choice == 'video_camera' || choice == 'image_camera') {
-      final allowed =
-          await ref.read(permissionServiceProvider).requestCamera();
-      if (!allowed) {
-        if (mounted) {
-          setState(() => _notice =
-              'Autorisez la caméra dans les réglages pour filmer depuis '
-              'GraceEdit.');
-        }
-        return;
-      }
-    }
-    final svc = ref.read(importServiceProvider);
-    setState(() { _importing = true; _notice = null; });
-    try {
-      ImportResult? result;
-      switch (choice) {
-        case 'video_gallery':
-          result = await svc.pickVideo(source: ImportSource.gallery);
-        case 'video_camera':
-          result = await svc.pickVideo(source: ImportSource.camera);
-      }
-      if (result == null) return; // cancelled
-      if (!await ImportService.isReadable(result.asset.path)) {
-        if (mounted) {
-          setState(() => _notice = 'Fichier illisible ou vide — import annulé.');
-        }
-        return;
-      }
-      final s = ref.read(editorSessionProvider);
-      if (s == null) return;
-      var asset = result.asset;
-      // Probe the real video duration + dimensions.
-      if (asset.kind == MediaKind.video) {
-        final info = await _probeVideo(asset.path);
-        if (info != null) {
-          asset = MediaAsset(
-            id: asset.id, kind: asset.kind, path: asset.path,
-            durationMs: info.durationMs,
-            width: info.width, height: info.height,
-            source: asset.source,
-          );
-        }
-        // First clip: match the project canvas to the video instead of forcing
-        // a portrait frame with huge black bars around a landscape clip.
-        if (s.project.clips.isEmpty &&
-            info != null &&
-            info.width > 0 &&
-            info.height > 0) {
-          // Keep projects light: cap the long side at 1920.
-          var w = info.width;
-          var h = info.height;
-          final longSide = w > h ? w : h;
-          if (longSide > 1920) {
-            final ratio = 1920 / longSide;
-            w = (w * ratio).round();
-            h = (h * ratio).round();
-          }
-          w = (w ~/ 2) * 2;
-          h = (h ~/ 2) * 2;
-          s.project.canvas = CanvasSettings(width: w, height: h, fps: 30);
-          _notice = 'Format du projet adapté à votre vidéo : $w×$h.';
-        }
-      }
-      setState(() => s.project.assets.add(asset));
-      final end = asset.durationMs ?? 5000;
-      _exec(AddClipCommand(VideoClip(
-        id: GraceProject.newId(), assetId: asset.id,
-        startMs: 0, endMs: end,
-      )));
-      // Select the clip we just added so the preview and the tools act on it
-      // immediately — no extra tap for a beginner.
-      setState(() => _selectedClipIndex = s.project.clips.length - 1);
-    } on Exception catch (e) {
-      if (mounted) setState(() => _notice = 'Import impossible : $e');
-    } finally {
-      if (mounted) setState(() => _importing = false);
-    }
+    GraceToast.show(
+      context,
+      AppLocalizations.of(context).toastClipSplit,
+      actionLabel: AppLocalizations.of(context).actionUndo,
+      onAction: controller.undo,
+    );
   }
 
-  Future<({int durationMs, int width, int height})?> _probeVideo(
-      String path) async {
-    try {
-      final c = VideoPlayerController.file(File(path));
-      await c.initialize();
-      final ms = c.value.duration.inMilliseconds;
-      final size = c.value.size;
-      await c.dispose();
-      if (ms <= 0) return null;
-      return (
-        durationMs: ms,
-        width: size.width.round(),
-        height: size.height.round(),
+  void _deleteSelected() {
+    final l10n = AppLocalizations.of(context);
+    if (controller.selectedClip != null) {
+      final id = controller.selectedClip!.id;
+      controller.removeClip(id);
+      GraceToast.show(
+        context,
+        l10n.toastClipDeleted,
+        actionLabel: l10n.actionUndo,
+        onAction: controller.undo,
       );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = _session;
-    final strings = ref.watch(stringsProvider);
-    final g = context.grace;
-    if (_booting) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+    } else if (controller.selectedText != null) {
+      controller.removeText(controller.selectedText!.id);
+      GraceToast.show(
+        context,
+        l10n.toastTextDeleted,
+        actionLabel: l10n.actionUndo,
+        onAction: controller.undo,
+      );
+    } else if (controller.selectedAudio != null) {
+      controller.removeAudio(controller.selectedAudio!.id);
+      GraceToast.show(
+        context,
+        l10n.toastAudioDeleted,
+        actionLabel: l10n.actionUndo,
+        onAction: controller.undo,
       );
     }
-    if (s == null && _bootError == null) {
-      // The session can disappear while the editor stays mounted (e.g. the
-      // library's "Voir tout"). Reload it instead of showing a dead screen.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _booting) return;
-        setState(() => _booting = true);
-        _ensureSession();
-      });
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_bootError != null) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_bootError ?? strings.errorGeneric,
-                    textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _booting = true;
-                      _bootError = null;
-                    });
-                    _ensureSession();
-                  },
-                  icon: const Icon(Icons.refresh_outlined),
-                  label: const Text('Réessayer'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    if (s == null) {
-      return const Scaffold(body: SizedBox.shrink());
-    }
-    final p = s.project;
-    final profiles = ExportProfile.supportedBy(DeviceCapabilities.fallback);
-    final canvasProfile = ExportProfile.forCanvas(p.canvas.width, p.canvas.height);
-    final activeProfile = (_profile != null && profiles.contains(_profile))
-        ? _profile!
-        : (profiles.contains(canvasProfile) ? canvasProfile : profiles.first);
-    // A clip is always "active": if the user never tapped one, the first clip
-    // is selected so the preview shows the video they just imported.
-    final int? activeIndex = _activeClipIndex;
-    VideoClip? selected;
-    if (activeIndex != null) {
-      selected = p.clips[activeIndex];
-    }
-    MediaAsset? selectedAsset;
-    if (selected != null) {
-      for (final a in p.assets) {
-        if (a.id == selected.assetId) selectedAsset = a;
-      }
-    }
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-          onPressed: () async {
-            await ref.read(projectRepositoryProvider).save(p);
-            await ref.read(projectsProvider.notifier).refresh();
-            if (context.mounted) context.pop();
-          },
-        ),
-        title: Text(
-          p.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          if (_saving)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: SizedBox(
-                  width: 18, height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
-            ),
-          IconButton(
-            tooltip: 'Sous-titres',
-            icon: Badge(
-              isLabelVisible: p.subtitles.isNotEmpty,
-              label: Text('${p.subtitles.length}'),
-              child: const Icon(Icons.closed_caption_outlined),
-            ),
-            onPressed: () => context.push('/subtitles'),
-          ),
-          IconButton(
-            tooltip: strings.undo,
-            icon: const Icon(Icons.undo),
-            onPressed: s.commands.canUndo
-                ? () { setState(() => s.commands.undo(p)); _persist(); }
-                : null,
-          ),
-          IconButton(
-            tooltip: strings.redo,
-            icon: const Icon(Icons.redo),
-            onPressed: s.commands.canRedo
-                ? () { setState(() => s.commands.redo(p)); _persist(); }
-                : null,
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: _importing
-          ? const _ImportOverlay()
-          : Column(
-        children: [
-          if (_notice != null)
-            Container(
-              width: double.infinity,
-              color: g.elevated,
-              padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(_notice!,
-                        style: TextStyle(
-                            color: g.textSecondary, fontSize: 13)),
-                  ),
-                  IconButton(
-                    tooltip: 'Fermer',
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(Icons.close, size: 18, color: g.textSecondary),
-                    onPressed: () => setState(() => _notice = null),
-                  ),
-                ],
-              ),
-            ),
-          // Preview area: fitted to the real canvas ratio so what you see is
-          // exactly what gets exported (no misleading black bars).
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(GraceSpacing.m),
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: p.canvas.width / p.canvas.height,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: p.clips.isEmpty ? g.elevated : Colors.black,
-                      border: Border.all(color: g.border),
-                      borderRadius: BorderRadius.circular(GraceRadius.l),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        _buildPreview(p, selected, selectedAsset, g),
-                        if (p.clips.length > 1 && activeIndex != null)
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                'Partie ${activeIndex + 1} sur ${p.clips.length}',
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 11),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Timeline with real thumbnails.
-          Container(
-            height: 120,
-            padding: const EdgeInsets.symmetric(horizontal: GraceSpacing.m),
-            child: p.clips.isEmpty
-                ? Center(
-                    child: OutlinedButton.icon(
-                      onPressed: _importing ? null : _importMenu,
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                      label: const Text('Importer une vidéo'),
-                    ),
-                  )
-                : ReorderableListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: p.clips.length + 1,
-                    onReorderItem: (oldI, newI) {
-                      if (oldI >= p.clips.length) return;
-                      final target = newI.clamp(0, p.clips.length - 1);
-                      _exec(MoveClipCommand(p.clips[oldI].id, target));
-                    },
-                    itemBuilder: (c, i) {
-                      if (i == p.clips.length) {
-                        // Always-visible "add" tile: a beginner must never
-                        // wonder how to put a second clip on the timeline.
-                        return GestureDetector(
-                          key: const ValueKey('timeline_add'),
-                          onTap: _importing ? null : _importMenu,
-                          child: Container(
-                            width: 76,
-                            margin: const EdgeInsets.only(right: 8),
-                            decoration: BoxDecoration(
-                              color: g.elevated,
-                              border: Border.all(color: g.border),
-                              borderRadius:
-                                  BorderRadius.circular(GraceRadius.m),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add, color: g.textSecondary),
-                                const SizedBox(height: 4),
-                                Text('Ajouter',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        color: g.textSecondary)),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-                      final clip = p.clips[i];
-                      MediaAsset? asset;
-                      for (final a in p.assets) {
-                        if (a.id == clip.assetId) asset = a;
-                      }
-                      final sel = activeIndex == i;
-                      return GestureDetector(
-                        key: ValueKey(clip.id),
-                        onTap: () => setState(() => _selectedClipIndex = i),
-                        child: Container(
-                          width: 110,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            color: g.surface,
-                            border: Border.all(
-                                color: sel ? g.primary : g.border,
-                                width: sel ? 2 : 1),
-                            borderRadius:
-                                BorderRadius.circular(GraceRadius.m),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: Column(
-                            children: [
-                              Expanded(
-                                child: asset == null
-                                    ? const Icon(Icons.broken_image_outlined)
-                                    : GraceThumb(
-                                        assetId: asset.id,
-                                        sourcePath: asset.path,
-                                        kind: asset.kind.name,
-                                        frameMs: ThumbnailService
-                                            .representativeFrameMs(
-                                                clip.durationMs),
-                                        width: double.infinity,
-                                        height: double.infinity,
-                                        borderRadius: 0,
-                                      ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 4),
-                                child: Text(
-                                  '${(clip.durationMs / 1000).toStringAsFixed(1).replaceAll('.', ',')}s · ×${clip.speed.toStringAsFixed(1).replaceAll('.', ',')}',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          // Tool grid: every action visible at once, no hidden swipe.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                GraceSpacing.m, 0, GraceSpacing.m, GraceSpacing.s),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                _Action(
-                  icon: Icons.add_photo_alternate_outlined,
-                  label: _importing ? '…' : 'Importer',
-                  onTap: _importing ? null : _importMenu,
-                ),
-                _Action(
-                    icon: Icons.content_cut, label: strings.split,
-                    enabled: selected != null,
-                    onTap: () {
-                      final clip = selected!;
-                      final mid =
-                          (clip.startMs + clip.endMs) ~/ 2;
-                      _exec(SplitClipCommand(clip.id, mid));
-                      ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(const SnackBar(
-                          content: Text('Vidéo coupée en deux.'),
-                          duration: Duration(seconds: 2),
-                        ));
-                    }),
-                _Action(
-                    icon: Icons.crop_outlined, label: strings.trim,
-                    enabled: selected != null,
-                    onTap: _trimSheet),
-                _Action(
-                    icon: Icons.speed_outlined, label: 'Vitesse',
-                    enabled: selected != null,
-                    onTap: _speedVolumeSheet),
-                _Action(
-                    icon: Icons.tune_outlined, label: 'Filtres',
-                    enabled: selected != null,
-                    onTap: _filterSheet),
-                _Action(
-                    icon: Icons.rotate_right_outlined, label: 'Rotation',
-                    enabled: selected != null,
-                    onTap: () {
-                      final clip = selected!;
-                      _exec(UpdateClipPropsCommand(
-                          clip.id, rotation: (clip.rotation + 90) % 360));
-                    }),
-                _Action(
-                    icon: Icons.delete_outline, label: strings.delete,
-                    enabled: selected != null,
-                    onTap: () {
-                      _exec(RemoveClipCommand(selected!.id));
-                      setState(() => _selectedClipIndex = null);
-                    }),
-                _Action(
-                    icon: Icons.text_fields, label: strings.addText,
-                    onTap: _textSheet),
-              ],
-            ),
-          ),
-          // Export bar. The SafeArea keeps the controls above the system
-          // navigation bar (gesture or 3-button) while the surface still
-          // runs to the bottom edge.
-          Container(
-            decoration: BoxDecoration(
-              color: g.surface,
-              border: Border(top: BorderSide(color: g.border)),
-            ),
-            child: SafeArea(
-              top: false,
-              minimum: const EdgeInsets.only(bottom: GraceSpacing.m),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    GraceSpacing.m, GraceSpacing.s, GraceSpacing.m, 0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<ExportProfile>(
-                        initialValue: activeProfile,
-                        decoration: const InputDecoration(
-                            labelText: 'Qualité',
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8)),
-                        items: [
-                          for (final pr in profiles)
-                            DropdownMenuItem(value: pr, child: Text(pr.label)),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) setState(() => _profile = v);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: GraceSpacing.m),
-                    FilledButton.icon(
-                      onPressed: p.clips.isEmpty
-                          ? null
-                          : () => context.push('/export/${p.id}',
-                              extra: activeProfile),
-                      icon: const Icon(Icons.save_alt),
-                      label: Text(strings.export),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _trimSheet() async {
-    final s = ref.read(editorSessionProvider);
-    final idx = _activeClipIndex;
-    if (s == null || idx == null || idx >= s.project.clips.length) return;
-    final clip = s.project.clips[idx];
-    MediaAsset? asset;
-    for (final a in s.project.assets) {
-      if (a.id == clip.assetId) asset = a;
-    }
-    final maxMs = (asset?.durationMs ?? clip.endMs).toDouble();
-    var start = clip.startMs.toDouble();
-    var end = clip.endMs.toDouble();
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, setB) {
-          final tooShort = end - start < 500;
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text('Couper le clip',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Text('Gardez seulement la partie que vous voulez.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: context.grace.textSecondary)),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ValueBox(
-                            label: 'Début',
-                            value: '${(start / 1000).toStringAsFixed(1).replaceAll('.', ',')} s'),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _ValueBox(
-                            label: 'Fin',
-                            value: '${(end / 1000).toStringAsFixed(1).replaceAll('.', ',')} s'),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _ValueBox(
-                            label: 'Durée',
-                            value:
-                                '${((end - start) / 1000).toStringAsFixed(1).replaceAll('.', ',')} s',
-                            strong: true),
-                      ),
-                    ],
-                  ),
-                  RangeSlider(
-                    values: RangeValues(start, end),
-                    max: maxMs,
-                    min: 0,
-                    divisions: (maxMs / 100).round().clamp(1, 600),
-                    labels: RangeLabels(
-                      '${(start / 1000).toStringAsFixed(1).replaceAll('.', ',')}s',
-                      '${(end / 1000).toStringAsFixed(1).replaceAll('.', ',')}s',
-                    ),
-                    onChanged: (v) => setB(() {
-                      start = v.start;
-                      end = v.end;
-                    }),
-                  ),
-                  if (tooShort)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text('Il faut au moins 0,5 seconde.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: context.grace.destructive)),
-                    ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(c, false),
-                          child: const Text('Annuler'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: FilledButton(
-                          onPressed:
-                              tooShort ? null : () => Navigator.pop(c, true),
-                          child: Text(tooShort ? 'Trop court' : 'Couper'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-    if (ok == true) {
-      _exec(TrimClipCommand(clip.id,
-          newStartMs: start.round(), newEndMs: end.round()));
-    }
-  }
-
-  /// Text layers are shown on every clip and baked into the exported file —
-  /// no "fake" text tool that only decorates the project JSON.
-  Future<void> _textSheet() async {
-    final s = ref.read(editorSessionProvider);
-    if (s == null) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (c) => _TextSheet(
-        project: s.project,
-        onChanged: () {
-          if (!mounted) return;
-          setState(() {});
-          _persist();
-        },
-      ),
-    );
-  }
-
-  Future<void> _speedVolumeSheet() async {
-    final s = ref.read(editorSessionProvider);
-    final idx = _activeClipIndex;
-    if (s == null || idx == null || idx >= s.project.clips.length) return;
-    final clip = s.project.clips[idx];
-    var speed = clip.speed;
-    var volume = clip.volume;
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, setB) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Vitesse : ×${speed.toStringAsFixed(2).replaceAll('.', ',')}',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                const Text('Visible dans l’aperçu, pas encore enregistré dans le fichier.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey)),
-                Slider(
-                    value: speed, min: 0.5, max: 2.0, divisions: 6,
-                    label: '×${speed.toStringAsFixed(2).replaceAll('.', ',')}',
-                    onChanged: (v) => setB(() => speed = v)),
-                Text('Volume : ${(volume * 100).round()} %',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                Slider(
-                    value: volume, min: 0.0, max: 1.0, divisions: 10,
-                    label: '${(volume * 100).round()} %',
-                    onChanged: (v) => setB(() => volume = v)),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () => Navigator.pop(c, true),
-                    child: const Text('Appliquer'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    if (ok == true) {
-      _exec(UpdateClipPropsCommand(clip.id, speed: speed, volume: volume));
-    }
-  }
-
-  Future<void> _filterSheet() async {
-    final s = ref.read(editorSessionProvider);
-    final idx = _activeClipIndex;
-    if (s == null || idx == null || idx >= s.project.clips.length) return;
-    final clip = s.project.clips[idx];
-    var brightness = clip.brightness;
-    var contrast = clip.contrast;
-    var saturation = clip.saturation;
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, setB) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Luminosité : ${brightness.toStringAsFixed(2).replaceAll('.', ',')}',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                const Text('Visible dans l’aperçu, pas encore enregistré dans le fichier.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey)),
-                Slider(
-                    value: brightness, min: -0.5, max: 0.5, divisions: 20,
-                    onChanged: (v) => setB(() => brightness = v)),
-                Text('Contraste : ${contrast.toStringAsFixed(2).replaceAll('.', ',')}',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                Slider(
-                    value: contrast, min: 0.5, max: 1.5, divisions: 20,
-                    onChanged: (v) => setB(() => contrast = v)),
-                Text('Saturation : ${saturation.toStringAsFixed(2).replaceAll('.', ',')}',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                Slider(
-                    value: saturation, min: 0.0, max: 2.0, divisions: 20,
-                    onChanged: (v) => setB(() => saturation = v)),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => setB(() {
-                          brightness = 0.0;
-                          contrast = 1.0;
-                          saturation = 1.0;
-                        }),
-                        child: const Text('Réinitialiser'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () => Navigator.pop(c, true),
-                        child: const Text('Appliquer'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    if (ok == true) {
-      _exec(UpdateClipPropsCommand(clip.id,
-          brightness: brightness, contrast: contrast, saturation: saturation));
-    }
-  }
-
-  Widget _buildPreview(
-      GraceProject p, VideoClip? clip, MediaAsset? asset, GraceColors g) {
-    Widget applyEffects(Widget child) {
-      var out = child;
-      if (clip != null &&
-          (clip.brightness != 0.0 ||
-              clip.contrast != 1.0 ||
-              clip.saturation != 1.0)) {
-        out = ColorFiltered(
-          colorFilter: ColorFilter.matrix(graceColorMatrix(
-              clip.brightness, clip.contrast, clip.saturation)),
-          child: out,
-        );
-      }
-      if (clip != null && clip.rotation != 0) {
-        out = RotatedBox(quarterTurns: (clip.rotation ~/ 90) % 4, child: out);
-      }
-      return out;
-    }
-
-    // Text layers are composited over the frame exactly where the export puts
-    // them (bottom centre), so the preview never lies about the result.
-    Widget withText(Widget child) {
-      final hasSubtitles = p.subtitles.isNotEmpty;
-      if (p.texts.isEmpty) return child;
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          child,
-          LayoutBuilder(
-            builder: (context, constraints) {
-              // Match the export geometry: the text block is anchored to the
-              // bottom, above the subtitle band when there is one.
-              final frameW = constraints.maxWidth;
-              final fontSize = (frameW * 0.055).clamp(12.0, 64.0);
-              return Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    frameW * 0.06,
-                    0,
-                    frameW * 0.06,
-                    // The export anchors the whole text bitmap (padding
-                    // included) at 8% / 15%; add the same padding here so the
-                    // visible glyphs land at the same height.
-                    constraints.maxHeight * (hasSubtitles ? 0.15 : 0.08) +
-                        fontSize * 0.4,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final t in p.texts.skip(
-                          p.texts.length > 4 ? p.texts.length - 4 : 0))
-                        Padding(
-                          padding: EdgeInsets.only(top: fontSize * 0.2),
-                          child: Text(
-                            t.text,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: fontSize,
-                              height: 1.2,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                              shadows: const [
-                                Shadow(
-                                    color: Colors.black87,
-                                    blurRadius: 8,
-                                    offset: Offset(0, 1)),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
-      );
-    }
-
-    if (asset != null &&
-        asset.kind == MediaKind.video &&
-        File(asset.path).existsSync()) {
-      var offsetMs = 0;
-      final clipIndex = clip == null ? -1 : p.clips.indexOf(clip);
-      for (var i = 0; i < clipIndex; i++) {
-        offsetMs += p.clips[i].endMs - p.clips[i].startMs;
-      }
-      return withText(applyEffects(_PreviewPlayer(
-        key: ValueKey(asset.id),
-        path: asset.path,
-        cues: p.subtitles,
-        clipOffsetMs: offsetMs,
-        subtitleStyle: p.subtitleStyle,
-      )));
-    }
-    if (asset != null &&
-        asset.kind == MediaKind.image &&
-        File(asset.path).existsSync()) {
-      return withText(applyEffects(Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.file(File(asset.path), fit: BoxFit.contain,
-              errorBuilder: (_, _, _) =>
-                  const Center(child: Icon(Icons.broken_image_outlined))),
-        ],
-      )));
-    }
-    // Empty state.
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.movie_outlined, size: 56, color: g.textSecondary),
-          const SizedBox(height: 8),
-          Text('Importez une vidéo pour commencer',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: g.textSecondary, fontSize: 15)),
-          const SizedBox(height: 4),
-          Text('Format ${p.canvas.width}×${p.canvas.height}',
-              style: TextStyle(color: g.textSecondary, fontSize: 13)),
-        ],
-      ),
-    );
   }
 }
 
-/// Self-contained video preview with play/pause.
-class _PreviewPlayer extends StatefulWidget {
-  const _PreviewPlayer({
-    super.key,
-    required this.path,
-    this.cues = const [],
-    this.clipOffsetMs = 0,
-    this.subtitleStyle = 'classic',
+class _PortraitBody extends StatelessWidget {
+  const _PortraitBody({
+    required this.controller,
+    required this.onEditText,
+    required this.onAddMedia,
+    required this.onReconnect,
   });
-  final String path;
-  final List<SubtitleCue> cues;
-  final int clipOffsetMs;
-  final String subtitleStyle;
 
-  @override
-  State<_PreviewPlayer> createState() => _PreviewPlayerState();
-}
-
-class _PreviewPlayerState extends State<_PreviewPlayer> {
-  VideoPlayerController? _controller;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _init();
-  }
-
-  Future<void> _init() async {
-    try {
-      final c = VideoPlayerController.file(File(widget.path));
-      await c.initialize();
-      await c.setLooping(true);
-      if (mounted) setState(() => _controller = c);
-    } catch (e) {
-      if (mounted) setState(() => _error = '$e');
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
+  final EditorController controller;
+  final ValueChanged<TextItem> onEditText;
+  final VoidCallback onAddMedia;
+  final VoidCallback onReconnect;
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) {
-      return const Center(
-        child: Icon(Icons.broken_image_outlined,
-            color: Colors.white70, size: 48),
-      );
-    }
-    final c = _controller;
-    if (c == null || !c.value.isInitialized) {
-      return const Center(
-        child: SizedBox(
-            width: 28, height: 28,
-            child: CircularProgressIndicator(
-                strokeWidth: 2, color: Colors.white70)),
-      );
-    }
-    return GestureDetector(
-      onTap: () {
-        if (!mounted) return;
-        if (c.value.isPlaying) {
-          c.pause();
-        } else {
-          c.play();
-        }
-        setState(() {});
-      },
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final frameW = constraints.maxWidth;
-          final frameH = constraints.maxHeight;
-          final subFontSize = (frameW * 0.045).clamp(9.0, 48.0);
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              FittedBox(
-                fit: BoxFit.contain,
-                child: SizedBox(
-                    width: c.value.size.width,
-                    height: c.value.size.height,
-                    child: VideoPlayer(c)),
+    return Column(
+      children: [
+        EditorPreview(
+          controller: controller,
+          onEditText: onEditText,
+          onMoveTextStart: controller.beginGesture,
+          onMoveText: (text, dx, dy) {
+            final size = MediaQuery.sizeOf(context);
+            final width = size.width;
+            final height = GraceDims.preview;
+            controller.updateText(
+              text.copyWith(
+                x: (text.x + dx / width).clamp(0.05, 0.95),
+                y: (text.y + dy / height).clamp(0.05, 0.95),
               ),
-              ValueListenableBuilder<VideoPlayerValue>(
-                valueListenable: c,
-                builder: (context, value, _) {
-                  final ms =
-                      widget.clipOffsetMs + value.position.inMilliseconds;
-                  String? active;
-                  for (final cue in widget.cues) {
-                    if (ms >= cue.startMs && ms < cue.endMs) {
-                      active = cue.text;
-                      break;
-                    }
-                  }
-                  if (active == null) return const SizedBox.shrink();
-                  return Positioned(
-                    left: frameW * 0.03,
-                    right: frameW * 0.03,
-                    bottom: frameH * 0.035,
-                    child: Center(
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: subFontSize * 0.55,
-                            vertical: subFontSize * 0.22),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(subFontSize * 0.3),
-                        ),
-                        child: Text(
-                          active,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: subFontSize,
-                            height: 1.2,
-                            fontWeight: widget.subtitleStyle == 'classic'
-                                ? FontWeight.w500
-                                : FontWeight.w800,
-                            shadows: widget.subtitleStyle == 'outline'
-                                ? const [
-                                    Shadow(color: Colors.black, blurRadius: 3),
-                                    Shadow(
-                                        color: Colors.black,
-                                        blurRadius: 3,
-                                        offset: Offset(1, 1)),
-                                    Shadow(
-                                        color: Colors.black,
-                                        blurRadius: 3,
-                                        offset: Offset(-1, -1)),
-                                  ]
-                                : null,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              if (!c.value.isPlaying)
-                const Center(
-                  child: Icon(Icons.play_circle_outline,
-                      color: Colors.white, size: 64),
-                ),
-            ],
-          );
-        },
-      ),
+            );
+          },
+          onMoveTextEnd: controller.endGesture,
+          onReconnect: onReconnect,
+        ),
+        _PlayLine(controller: controller),
+        Expanded(
+          child: EditorTimeline(controller: controller, onAddMedia: onAddMedia),
+        ),
+      ],
     );
   }
 }
 
-/// Explicit feedback while a picked file is copied out of the picker cache:
-/// a long 4K clip can take a few seconds and silence feels broken.
-class _ImportOverlay extends StatelessWidget {
-  const _ImportOverlay();
+class _LandscapeBody extends StatelessWidget {
+  const _LandscapeBody({
+    required this.controller,
+    required this.onEditText,
+    required this.onAddMedia,
+    required this.onReconnect,
+  });
+
+  final EditorController controller;
+  final ValueChanged<TextItem> onEditText;
+  final VoidCallback onAddMedia;
+  final VoidCallback onReconnect;
 
   @override
   Widget build(BuildContext context) {
-    final g = context.grace;
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(
-              width: 36,
-              height: 36,
-              child: CircularProgressIndicator(strokeWidth: 3)),
-          const SizedBox(height: 16),
-          Text('Importation…',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: g.textPrimary)),
-          const SizedBox(height: 4),
-          Text('Votre fichier est copié sur votre téléphone.',
-              style: TextStyle(fontSize: 13, color: g.textSecondary)),
-        ],
-      ),
-    );
-  }
-}
-
-/// Bottom sheet that owns its [TextEditingController]. The controller must
-/// outlive the sheet's exit animation: disposing it as soon as the route
-/// future completed made Flutter assert ("used after being disposed") and
-/// flashed a red error screen while the sheet closed.
-class _TextSheet extends StatefulWidget {
-  const _TextSheet({required this.project, required this.onChanged});
-
-  final GraceProject project;
-  final VoidCallback onChanged;
-
-  @override
-  State<_TextSheet> createState() => _TextSheetState();
-}
-
-class _TextSheetState extends State<_TextSheet> {
-  final _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _add() {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    _controller.clear();
-    setState(() {
-      widget.project.texts
-          .add(TextLayer(id: GraceProject.newId(), text: text));
-    });
-    widget.onChanged();
-    FocusScope.of(context).unfocus();
-  }
-
-  void _remove(TextLayer layer) {
-    setState(() => widget.project.texts.remove(layer));
-    widget.onChanged();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final g = context.grace;
-    final p = widget.project;
-    final canAdd = _controller.text.trim().isNotEmpty;
-    return Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.85,
-          ),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text('Texte sur la vidéo',
-                    textAlign: TextAlign.center,
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                Text('Il s’affiche en bas de l’image, sur toute la vidéo.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: g.textSecondary)),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _controller,
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration:
-                      const InputDecoration(hintText: 'Ex. : Bonjour à tous'),
-                  onChanged: (_) => setState(() {}),
-                  onSubmitted: (_) => _add(),
-                ),
-                const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: canAdd ? _add : null,
-                  child: const Text('Ajouter'),
-                ),
-                if (p.texts.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Textes ajoutés',
-                        style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: g.textPrimary)),
-                  ),
-                  for (final t in List<TextLayer>.from(p.texts))
-                    ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(t.text,
-                          maxLines: 2, overflow: TextOverflow.ellipsis),
-                      trailing: IconButton(
-                        tooltip: 'Supprimer ce texte',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () => _remove(t),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 960),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 280,
+              child: Column(
+                children: [
+                  EditorPreview(
+                    controller: controller,
+                    onEditText: onEditText,
+                    onMoveTextStart: controller.beginGesture,
+                    onMoveText: (text, dx, dy) => controller.updateText(
+                      text.copyWith(
+                        x: (text.x + dx / 280).clamp(0.05, 0.95),
+                        y: (text.y + dy / 158).clamp(0.05, 0.95),
                       ),
                     ),
+                    onMoveTextEnd: controller.endGesture,
+                    onReconnect: onReconnect,
+                  ),
+                  _PlayLine(controller: controller),
                 ],
-                const SizedBox(height: 8),
-                OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Fermer'),
-                ),
-              ],
+              ),
             ),
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: EditorTimeline(
+                controller: controller,
+                onAddMedia: onAddMedia,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _Action extends StatelessWidget {
-  const _Action(
-      {required this.icon,
-      required this.label,
-      required this.onTap,
-      this.enabled = true});
+class _PlayLine extends StatelessWidget {
+  const _PlayLine({required this.controller});
+  final EditorController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.grace;
+    final l10n = AppLocalizations.of(context);
+    return SizedBox(
+      height: GraceDims.playLine,
+      child: Row(
+        children: [
+          const SizedBox(width: 24),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: formatDuration(controller.positionMs),
+                  style: GraceType.bodyMedium.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                TextSpan(
+                  text: ' / ${formatDuration(controller.durationMs)}',
+                  style: GraceType.bodyMedium.copyWith(
+                    color: p.secondary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          Semantics(
+            button: true,
+            label: controller.isPlaying ? l10n.actionPause : l10n.actionPlay,
+            excludeSemantics: true,
+            child: GestureDetector(
+              onTap: controller.togglePlay,
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: controller.isEmpty ? p.surface : p.button,
+                ),
+                child: Icon(
+                  controller.isPlaying ? Icons.pause : Icons.play_arrow,
+                  size: 26,
+                  color: controller.isEmpty ? p.secondary : p.onButton,
+                ),
+              ),
+            ),
+          ),
+          const Spacer(),
+          _UndoAction(
+            icon: Icons.undo,
+            label: l10n.actionUndo,
+            onTap: controller.canUndo ? controller.undo : null,
+          ),
+          _UndoAction(
+            icon: Icons.redo,
+            label: l10n.actionRedo,
+            onTap: controller.canRedo ? controller.redo : null,
+          ),
+          const SizedBox(width: 12),
+        ],
+      ),
+    );
+  }
+}
+
+class _UndoAction extends StatelessWidget {
+  const _UndoAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
-  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
-    final g = context.grace;
-    final active = enabled && onTap != null;
-    return SizedBox(
-      width: 86,
-      child: Material(
-        color: active ? g.surface : g.elevated,
-        borderRadius: BorderRadius.circular(GraceRadius.m),
-        child: InkWell(
-          onTap: active ? onTap : null,
-          borderRadius: BorderRadius.circular(GraceRadius.m),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon,
-                    size: 20,
-                    color: active ? g.primary : g.textSecondary),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: active ? g.textPrimary : g.textSecondary,
-                  ),
-                ),
-              ],
-            ),
+    final p = context.grace;
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: label,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 44,
+          height: 48,
+          child: Icon(
+            icon,
+            size: 22,
+            color: onTap == null ? p.outline : p.text,
           ),
         ),
       ),
@@ -1404,39 +1506,467 @@ class _Action extends StatelessWidget {
   }
 }
 
-/// Small labelled value used by the edit sheets ("Début 0,0 s").
-class _ValueBox extends StatelessWidget {
-  const _ValueBox({
-    required this.label,
-    required this.value,
-    this.strong = false,
-  });
-  final String label;
-  final String value;
-  final bool strong;
+class _EditorTopBar extends StatelessWidget {
+  const _EditorTopBar({required this.controller, required this.l10n});
+  final EditorController controller;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
-    final g = context.grace;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-      decoration: BoxDecoration(
-        color: g.elevated,
-        borderRadius: BorderRadius.circular(GraceRadius.m),
-      ),
-      child: Column(
+    final p = context.grace;
+    return SizedBox(
+      height: 72,
+      child: Row(
         children: [
-          Text(label,
-              style: TextStyle(fontSize: 11, color: g.textSecondary)),
-          const SizedBox(height: 2),
-          Text(value,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: strong ? FontWeight.w700 : FontWeight.w600,
-                color: g.textPrimary,
-              )),
+          const SizedBox(width: 4),
+          GraceIconAction(
+            icon: Icons.arrow_back,
+            semanticLabel: l10n.semanticsBack,
+            onPressed: () => context.go('/home'),
+          ),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  controller.project.title.isEmpty
+                      ? l10n.editorUntitled
+                      : controller.project.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GraceType.barTitle,
+                ),
+                Row(
+                  children: [
+                    Icon(
+                      switch (controller.saveState) {
+                        SaveState.saved => Icons.check,
+                        SaveState.saving => Icons.sync,
+                        SaveState.failed => Icons.warning_amber_rounded,
+                      },
+                      size: 13,
+                      color: controller.saveState == SaveState.failed
+                          ? p.error
+                          : p.secondary,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        switch (controller.saveState) {
+                          SaveState.saved => l10n.saveStateSaved,
+                          SaveState.saving => l10n.saveStateSaving,
+                          SaveState.failed => l10n.saveStateFailed,
+                        },
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GraceType.small.copyWith(
+                          color: controller.saveState == SaveState.failed
+                              ? p.error
+                              : p.secondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          GracePillAction(
+            label: l10n.actionExport,
+            onPressed: controller.isEmpty
+                ? null
+                : () => context.push('/export/${controller.project.id}'),
+          ),
+          const SizedBox(width: 12),
         ],
       ),
     );
   }
+}
+
+class _SaveFailedBanner extends StatelessWidget {
+  const _SaveFailedBanner({required this.onRetry, required this.onFreeSpace});
+  final VoidCallback onRetry;
+  final VoidCallback onFreeSpace;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final p = context.grace;
+    return Container(
+      color: p.surface,
+      padding: const EdgeInsets.fromLTRB(24, 10, 12, 10),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 20, color: p.error),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              l10n.editorSaveFailed,
+              style: GraceType.secondaryMedium.copyWith(color: p.error),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: Text(l10n.actionRetry)),
+          TextButton(onPressed: onFreeSpace, child: Text(l10n.saveFreeSpace)),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditorToolbar extends StatelessWidget {
+  const _EditorToolbar({
+    required this.controller,
+    required this.onAdd,
+    required this.onAudio,
+    required this.onText,
+    required this.onAdjust,
+    required this.onFormat,
+    required this.onCover,
+    required this.onSplit,
+    required this.onVolume,
+    required this.onCrop,
+    required this.onDelete,
+    required this.onMore,
+    required this.onBack,
+    required this.onEditText,
+    required this.onStyle,
+    required this.onColor,
+    required this.onTextMore,
+  });
+
+  final EditorController controller;
+  final VoidCallback onAdd;
+  final VoidCallback onAudio;
+  final VoidCallback onText;
+  final VoidCallback onAdjust;
+  final VoidCallback onFormat;
+  final VoidCallback onCover;
+  final VoidCallback onSplit;
+  final VoidCallback onVolume;
+  final VoidCallback onCrop;
+  final VoidCallback onDelete;
+  final VoidCallback onMore;
+  final VoidCallback onBack;
+
+  /// EDT-03 : barre d'outils propre au texte sélectionné.
+  final VoidCallback onEditText;
+  final VoidCallback onStyle;
+  final VoidCallback onColor;
+  final VoidCallback onTextMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final selected = controller.selection != SelectionType.none;
+    final text = controller.selectedText;
+    final clipSelected = controller.selectedClip != null && text == null;
+    return Container(
+      height: GraceDims.toolbar + MediaQuery.paddingOf(context).bottom,
+      color: context.grace.background,
+      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+      child: !selected
+          ? SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  _Tool(icon: Icons.add, label: l10n.editorAdd, onTap: onAdd),
+                  _Tool(
+                    icon: Icons.music_note,
+                    label: l10n.editorAudio,
+                    onTap: onAudio,
+                  ),
+                  _Tool(
+                    icon: Icons.title,
+                    label: l10n.editorText,
+                    onTap: onText,
+                  ),
+                  _Tool(
+                    icon: Icons.tune,
+                    label: l10n.editorAdjust,
+                    onTap: onAdjust,
+                  ),
+                  _Tool(
+                    icon: Icons.aspect_ratio,
+                    label: l10n.editorFormat,
+                    onTap: onFormat,
+                  ),
+                  _Tool(
+                    icon: Icons.image_outlined,
+                    label: l10n.editorCover,
+                    onTap: onCover,
+                  ),
+                ],
+              ),
+            )
+          : Row(
+              children: [
+                const SizedBox(width: 4),
+                GraceIconAction(
+                  icon: Icons.chevron_left,
+                  semanticLabel: l10n.actionBack,
+                  onPressed: onBack,
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: text != null
+                          ? [
+                              // EDT-03 : Modifier · Style · Couleur · Supprimer · Plus
+                              _Tool(
+                                icon: Icons.edit_outlined,
+                                label: l10n.textEdit,
+                                onTap: onEditText,
+                              ),
+                              _Tool(
+                                icon: Icons.format_paint,
+                                label: l10n.textStyle,
+                                onTap: onStyle,
+                              ),
+                              _Tool(
+                                icon: Icons.palette_outlined,
+                                label: l10n.textColor,
+                                onTap: onColor,
+                              ),
+                              _Tool(
+                                icon: Icons.delete_outline,
+                                label: l10n.editorDelete,
+                                onTap: onDelete,
+                              ),
+                              _Tool(
+                                icon: Icons.more_horiz,
+                                label: l10n.actionMore,
+                                onTap: onTextMore,
+                              ),
+                            ]
+                          : [
+                              if (clipSelected) ...[
+                                _Tool(
+                                  icon: Icons.content_cut,
+                                  label: l10n.editorSplit,
+                                  onTap: onSplit,
+                                ),
+                                _Tool(
+                                  icon: Icons.volume_up,
+                                  label: l10n.editorVolume,
+                                  onTap: onVolume,
+                                ),
+                                _Tool(
+                                  icon: Icons.crop_free,
+                                  label: l10n.editorCrop,
+                                  onTap: onCrop,
+                                ),
+                              ],
+                              if (controller.selectedAudio != null)
+                                _Tool(
+                                  icon: Icons.tune,
+                                  label: l10n.audioFade,
+                                  onTap: onAudio,
+                                ),
+                              _Tool(
+                                icon: Icons.delete_outline,
+                                label: l10n.editorDelete,
+                                onTap: onDelete,
+                              ),
+                              _Tool(
+                                icon: Icons.more_horiz,
+                                label: l10n.actionMore,
+                                onTap: onMore,
+                              ),
+                            ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _Tool extends StatelessWidget {
+  const _Tool({required this.icon, required this.label, required this.onTap});
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: 72,
+          height: GraceDims.toolbar,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 24),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GraceType.small,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PreciseRow extends StatelessWidget {
+  const _PreciseRow({
+    required this.label,
+    required this.value,
+    required this.onMinus,
+    required this.onPlus,
+  });
+  final String label;
+  final String value;
+  final VoidCallback onMinus;
+  final VoidCallback onPlus;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(width: 60, child: Text(label, style: GraceType.body)),
+        const Spacer(),
+        _RoundButton(icon: Icons.remove, onTap: onMinus),
+        SizedBox(
+          width: 100,
+          child: Text(
+            value,
+            textAlign: TextAlign.center,
+            style: GraceType.bodyMedium.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+        _RoundButton(icon: Icons.add, onTap: onPlus),
+      ],
+    );
+  }
+}
+
+class _RoundButton extends StatelessWidget {
+  const _RoundButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: IconButton(
+        onPressed: onTap,
+        icon: Icon(icon, size: 20),
+        style: IconButton.styleFrom(backgroundColor: context.grace.surface),
+      ),
+    );
+  }
+}
+
+class _CropAction extends StatelessWidget {
+  const _CropAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          width: 88,
+          height: 64,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: GraceColors.ivory, size: 22),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GraceType.small.copyWith(color: GraceColors.ivory),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CropSurface extends StatelessWidget {
+  const _CropSurface({required this.controller, required this.value});
+  final EditorController controller;
+  final Clip value;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = controller.mediaFor(value);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (media != null)
+          GraceThumb(
+            media: media,
+            width: 1000,
+            height: 1000,
+            timeMs: value.trimStartMs,
+            showDuration: false,
+          ),
+        IgnorePointer(child: CustomPaint(painter: _ThirdGridPainter())),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: GraceColors.accent, width: 2),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ThirdGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = GraceColors.ivory.withValues(alpha: 0.6)
+      ..strokeWidth = 1;
+    for (var i = 1; i < 3; i++) {
+      canvas.drawLine(
+        Offset(size.width * i / 3, 0),
+        Offset(size.width * i / 3, size.height),
+        paint,
+      );
+      canvas.drawLine(
+        Offset(0, size.height * i / 3),
+        Offset(size.width, size.height * i / 3),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ThirdGridPainter oldDelegate) => false;
 }

@@ -1,11 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive icon foreground: a cream play mark kept inside the 66dp safe zone. -->
+<!-- Avant-plan de l'icône adaptative : symbole ivoire + bloc d'accent.
+     Tracé exact de design/icone-application/icone_avant-plan.svg (108 dp). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#FAF8F4"
-        android:pathData="M36,28 L36,80 L80,54 Z" />
+        android:pathData="M66.7167,35.8583 A22.1667,22.1667 0 1 0 76.1667,54"
+        android:strokeColor="#F6F2EA"
+        android:strokeWidth="11.6667"
+        android:strokeLineCap="butt"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M70.3333,50.5 H81.7667 L82,54 H70.3333 Z"
+        android:fillColor="#F6F2EA" />
+    <path
+        android:pathData="M55.1667,50.5 H66.8333 V59.8333 H55.1667 Z"
+        android:fillColor="#E2542B" />
 </vector>

@@ -74,3 +74,7 @@ Si un contrôle ne peut pas s'exécuter dans ton environnement (pas d'émulateur
 
 ## 10. Fin de mission
 Quand M7 est terminé : écris `suivi/RAPPORT_FINAL.md` (voir le modèle) : ce qui est fait, ce qui ne l'est pas, les écarts, les décisions `[IMPORTANT]`, les résultats des contrôles, le « Non vérifié », et la liste de ce qui reste à faire par un humain. Puis arrête-toi.
+
+## 11. Préparer la suite sans la faire
+La Phase 2 est décrite dans `docs/graceedit/PHASE2_PLAN.md`. **Ne l'implémente pas.** Garde seulement les points d'extension de la §4 de ce plan (pistes multiples typées, chaîne d'effets par clip, version du schéma et migrations, navigation extensible, références de médias indépendantes de l'emplacement). Aucune interface de la Phase 2 n'apparaît dans l'application.
+

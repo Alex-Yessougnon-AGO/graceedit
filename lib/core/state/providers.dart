@@ -1,74 +1,74 @@
-/// Riverpod state: projects list, current project + command stack, prefs.
-library;
-
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../commands/commands.dart';
-import '../l10n/strings.dart';
-import '../models/grace_project.dart';
-import '../services/permissions.dart';
-import '../storage/project_repository.dart';
+import '../models/project.dart';
+import '../models/settings.dart';
+import '../platform/native_gateway.dart';
+import '../services/export_service.dart';
+import '../services/media_service.dart';
+import '../store/app_store.dart';
 
-final permissionServiceProvider =
-    Provider<PermissionService>((ref) => PermissionService());
+final storeProvider = ChangeNotifierProvider<AppStore>((ref) => AppStore());
 
-class OwnedAsset {
-  const OwnedAsset({required this.projectId, required this.projectName, required this.asset});
-  final String projectId;
-  final String projectName;
-  final MediaAsset asset;
-}
-
-/// Every imported asset across all projects (global Bibliothèque).
-final allAssetsProvider = FutureProvider<List<OwnedAsset>>((ref) async {
-  final projects = await ref.watch(projectsProvider.future);
-  final out = <OwnedAsset>[];
-  for (final p in projects) {
-    for (final a in p.assets) {
-      out.add(OwnedAsset(projectId: p.id, projectName: p.name, asset: a));
-    }
-  }
-  return out;
+/// Initialisation réelle : lecture du stockage local, purge de la corbeille.
+final bootstrapProvider = FutureProvider<void>((ref) async {
+  await ref.read(storeProvider).init();
 });
 
-final projectRepositoryProvider = Provider<ProjectRepository>((ref) => ProjectRepository());
+final settingsProvider = Provider<Settings>(
+  (ref) => ref.watch(storeProvider).settings,
+);
 
-final projectsProvider = AsyncNotifierProvider<ProjectsNotifier, List<GraceProject>>(ProjectsNotifier.new);
+final nativeGatewayProvider = Provider<NativeGateway>((ref) => NativeGateway());
 
-class ProjectsNotifier extends AsyncNotifier<List<GraceProject>> {
-  @override
-  Future<List<GraceProject>> build() => ref.watch(projectRepositoryProvider).listAll();
+/// Capacités de l'appareil, détectées une seule fois et mises en cache.
+final deviceInfoProvider = FutureProvider<DeviceInfo>((ref) async {
+  return ref.watch(nativeGatewayProvider).deviceInfo();
+});
 
-  Future<GraceProject> create({required String name, required ProjectKind kind}) async {
-    final p = GraceProject(name: name, kind: kind);
-    await ref.read(projectRepositoryProvider).save(p);
-    final current = await future;
-    state = AsyncData([p, ...current]);
-    return p;
-  }
+final mediaServiceProvider = Provider<MediaService>(
+  (ref) =>
+      MediaService(ref.watch(nativeGatewayProvider), ref.watch(storeProvider)),
+);
 
-  Future<void> remove(String id) async {
-    await ref.read(projectRepositoryProvider).delete(id);
-    final current = await future;
-    state = AsyncData(current.where((p) => p.id != id).toList());
-  }
+final thumbnailServiceProvider = Provider<ThumbnailService>(
+  (ref) => ThumbnailService(
+    ref.watch(nativeGatewayProvider),
+    ref.watch(storeProvider),
+  ),
+);
 
-  Future<void> refresh() async {
-    state = const AsyncLoading();
-    state = AsyncData(await ref.read(projectRepositoryProvider).listAll());
-  }
+final exportServiceProvider = Provider<ExportService>(
+  (ref) => ExportService(
+    ref.watch(nativeGatewayProvider),
+    () => ref.watch(storeProvider).exportsDir(),
+  ),
+);
+
+/// Médias choisis en attente de confirmation (IMP-02).
+final pendingImportProvider = StateProvider<List<MediaRef>>((ref) => const []);
+
+/// Résultat d'un export en cours, partagé entre les écrans.
+final activeExportProvider = StateProvider<ActiveExport?>((ref) => null);
+
+class ActiveExport {
+  const ActiveExport({
+    required this.projectId,
+    required this.quality,
+    required this.startedAt,
+    this.jobId,
+  });
+  final String projectId;
+  final ExportQuality quality;
+  final DateTime startedAt;
+
+  /// Identifiant du travail de rendu côté natif, `null` tant que le rendu
+  /// n'a pas démarré (réglages validés dans `EXP-01`).
+  final String? jobId;
+
+  ActiveExport copyWith({String? jobId}) => ActiveExport(
+    projectId: projectId,
+    quality: quality,
+    startedAt: startedAt,
+    jobId: jobId ?? this.jobId,
+  );
 }
-
-/// Holds the open project + its undo stack for the editor.
-class EditorSession {
-  EditorSession(this.project) : commands = CommandStack();
-  final GraceProject project;
-  final CommandStack commands;
-}
-
-final editorSessionProvider = StateProvider<EditorSession?>((ref) => null);
-
-final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
-final localeProvider = StateProvider<AppLocale>((ref) => AppLocale.fr);
-final stringsProvider = Provider<Strings>((ref) => Strings(ref.watch(localeProvider)));

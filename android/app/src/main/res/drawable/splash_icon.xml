@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Symbole du splash système : zone de 288 dp, encre de 96 dp centrée.
+     L'encre de 96 dp est celle des maquettes (288 px à 3x) et celle du
+     splash Flutter (GraceMark de 120 dp dont le tracé occupe 96 dp) : la
+     transition entre le splash système et le splash Flutter est invisible.
+     Tracé exact de design/icone-application/splash_symbole_clair.svg,
+     réduit de 1,25 à 1,0 pour retrouver l'encre des maquettes. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+    <path
+        android:pathData="M165.8,112.9 A38,38 0 1 0 182,144"
+        android:strokeColor="#14151A"
+        android:strokeWidth="20"
+        android:strokeLineCap="butt"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M172,138 H191.6 L192,144 H172 Z"
+        android:fillColor="#14151A" />
+    <path
+        android:pathData="M146,138 H166 V154 H146 Z"
+        android:fillColor="#E2542B" />
+</vector>

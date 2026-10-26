@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- Splash de lancement (Android 11 et précédents) : fond du thème + symbole
+     centré, strictement identiques au splash Flutter pour éviter un double
+     splash visible. Les variantes claire/sombre viennent de @color/splash_background
+     et de @drawable/splash_icon (drawable-night). -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
-
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+    <item android:drawable="@color/splash_background" />
+    <item
+        android:drawable="@drawable/splash_icon"
+        android:gravity="center" />
 </layer-list>

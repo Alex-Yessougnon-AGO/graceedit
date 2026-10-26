@@ -1,159 +1,151 @@
-/// Real export orchestration: render plan -> native Media3 job ->
-/// progress -> verify -> register output. No fake exports.
-library;
-
-import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
-import '../models/grace_project.dart';
-import '../platform/capabilities.dart';
+import '../models/project.dart';
+import '../platform/native_gateway.dart';
 
-enum NativeExportState { running, done, error, cancelled }
+enum ExportQuality {
+  high,
+  standard;
 
-class NativeExportStatus {
-  const NativeExportStatus({
-    required this.state, required this.progress, this.error,
+  String get key => name;
+}
+
+class ExportConfiguration {
+  const ExportConfiguration({
+    required this.quality,
+    required this.width,
+    required this.height,
+    required this.estimatedBytes,
   });
-  final NativeExportState state;
-  final double progress;
-  final String? error;
+  final ExportQuality quality;
+  final int width;
+  final int height;
+  final int estimatedBytes;
+}
+
+class ExportException implements Exception {
+  ExportException(this.code);
+  final String code;
+}
+
+/// Travail de rendu démarré côté natif.
+///
+/// Le chemin de sortie est calculé **une seule fois**, au démarrage : `finish`
+/// le reçoit ensuite pour vérifier le fichier et l'enregistrer dans la galerie.
+class ExportHandle {
+  const ExportHandle({required this.jobId, required this.path});
+  final String jobId;
+  final String path;
 }
 
 class ExportService {
-  ExportService({MethodChannel? channel})
-      : _channel = channel ?? const MethodChannel('graceedit/export');
-  final MethodChannel _channel;
+  ExportService(this.gateway, this.exportDirectory);
 
-  /// Output file of the last started export (null if none).
-  String? lastOutputPath;
+  final NativeGateway gateway;
+  final Future<Directory> Function() exportDirectory;
 
-  /// Job id of the currently running native export (null if none).
-  /// Used by the UI to really cancel the native job.
-  String? currentJobId;
+  static const _bitrateHigh = 6000000; // 6 Mbit/s moyen
+  static const _bitrateStandard = 3000000;
 
-  /// Builds the render plan from the project and runs it natively.
-  /// Emits progress 0..1. Throws on validation or native error.
-  Stream<NativeExportStatus> export({
-    required GraceProject project,
-    required ExportProfile profile,
-  }) async* {
-    if (project.clips.isEmpty) {
-      throw StateError('Timeline vide — ajoutez au moins un clip.');
+  ExportConfiguration configuration(
+    Project project,
+    ExportQuality quality, {
+    bool supports1080p = true,
+  }) {
+    final high = quality == ExportQuality.high && supports1080p;
+    final longEdge = high ? 1080 : 720;
+    final (w, h) = switch (project.format) {
+      ProjectFormat.vertical => (high ? 1080 : 720, high ? 1920 : 1280),
+      ProjectFormat.square => (longEdge, longEdge),
+      ProjectFormat.horizontal => (high ? 1920 : 1280, high ? 1080 : 720),
+      ProjectFormat.portrait => (high ? 1080 : 720, high ? 1350 : 900),
+    };
+    final seconds = project.durationMs / 1000;
+    final bitrate = high ? _bitrateHigh : _bitrateStandard;
+    final estimate = ((seconds * bitrate) / 8 * 1.08).round();
+    return ExportConfiguration(
+      quality: high ? ExportQuality.high : ExportQuality.standard,
+      width: w,
+      height: h,
+      estimatedBytes: estimate,
+    );
+  }
+
+  Future<ExportHandle> start(
+    Project project,
+    ExportConfiguration config,
+  ) async {
+    if (!gateway.isAndroid) {
+      throw ExportException('unsupported_platform');
     }
-    final clips = <Map<String, dynamic>>[];
+    final clips = <Map<String, Object>>[];
     for (final clip in project.clips) {
-      MediaAsset? asset;
-      for (final a in project.assets) {
-        if (a.id == clip.assetId) asset = a;
-      }
-      if (asset == null) {
-        throw StateError('Asset manquant pour un clip — projet incohérent.');
-      }
-      if (asset.kind != MediaKind.video) continue; // V1: photo clips skipped in render
-      final file = File(asset.path);
-      if (!await file.exists()) {
-        throw StateError('Fichier introuvable : ${asset.path.split('/').last}');
+      final media = project.mediaById(clip.mediaId);
+      if (media == null || media.fileMissing) {
+        throw ExportException('missing_media');
       }
       clips.add({
-        'path': asset.path,
-        'startMs': clip.startMs,
-        'endMs': clip.endMs,
+        'path': media.uri,
+        'startMs': clip.trimStartMs,
+        'endMs': clip.trimEndMs,
         'rotation': clip.rotation,
       });
     }
-    if (clips.isEmpty) {
-      throw StateError('Aucun clip vidéo à exporter.');
-    }
-
-    final docs = await getApplicationDocumentsDirectory();
-    final dir = Directory('${docs.path}/graceedit_exports');
-    if (!await dir.exists()) await dir.create(recursive: true);
-    // A readable file name the user can recognise in the share sheet —
-    // never a raw project UUID.
-    final safeName = project.name
-        .replaceAll(RegExp(r'[/\\:*?"<>|]'), '')
-        .trim()
-        .replaceAll(RegExp(r'\s+'), '_');
-    final now = DateTime.now();
-    String two(int v) => v.toString().padLeft(2, '0');
-    final stamp =
-        '${now.year}${two(now.month)}${two(now.day)}_${two(now.hour)}${two(now.minute)}';
-    final base = safeName.isEmpty ? 'video' : safeName;
-    var outPath = '${dir.path}/${base}_$stamp.mp4';
-    var n = 2;
-    while (File(outPath).existsSync()) {
-      outPath = '${dir.path}/${base}_${stamp}_$n.mp4';
-      n++;
-    }
-    lastOutputPath = outPath;
-
-    late final String jobId;
-    try {
-      jobId = await _channel.invokeMethod<String>('startExport', {
-        'clips': clips,
-        'texts': project.texts.map((t) => t.text).toList(),
-        'subtitles': project.subtitles
-            .map((s) => {
-                  'startMs': s.startMs,
-                  'endMs': s.endMs,
-                  'text': s.text,
-                })
-            .toList(),
-        'subtitleStyle': project.subtitleStyle,
-        'width': profile.width,
-        'height': profile.height,
-        'outPath': outPath,
-      }) ?? (throw StateError('Le moteur d’export n’a pas répondu.'));
-      currentJobId = jobId;
-    } on MissingPluginException {
-      throw StateError('Export natif indisponible sur cette plateforme.');
-    }
-
-    // Poll until terminal state.
-    while (true) {
-      await Future<void>.delayed(const Duration(milliseconds: 400));
-      final raw = await _channel.invokeMethod<Map>('exportProgress', {'jobId': jobId});
-      final map = Map<String, dynamic>.from(raw as Map);
-      final state = switch (map['state'] as String) {
-        'done' => NativeExportState.done,
-        'error' => NativeExportState.error,
-        'cancelled' => NativeExportState.cancelled,
-        _ => NativeExportState.running,
-      };
-      final progress = ((map['progress'] ?? 0) as num).toDouble().clamp(0.0, 1.0);
-      yield NativeExportStatus(
-          state: state, progress: progress, error: map['error'] as String?);
-      if (state != NativeExportState.running) {
-        if (currentJobId == jobId) currentJobId = null;
-        return;
-      }
-    }
+    if (clips.isEmpty) throw ExportException('empty');
+    final texts = project.texts
+        .map(
+          (t) => <String, Object>{
+            'text': t.text,
+            'startMs': t.startMs,
+            'endMs': t.endMs,
+            'x': t.x,
+            'y': t.y,
+          },
+        )
+        .toList();
+    final safeTitle = project.title
+        .replaceAll(RegExp(r'[^\p{L}\p{N} _-]', unicode: true), '')
+        .trim();
+    final name =
+        '${safeTitle.isEmpty ? 'GraceEdit' : safeTitle}_${DateTime.now().millisecondsSinceEpoch}.mp4';
+    final dir = await exportDirectory();
+    await dir.create(recursive: true);
+    final outPath = p.join(dir.path, name);
+    final jobId = await gateway.startExport(
+      clips: clips,
+      texts: texts,
+      width: config.width,
+      height: config.height,
+      outPath: outPath,
+    );
+    return ExportHandle(jobId: jobId, path: outPath);
   }
 
-  Future<bool> cancel(String jobId) async {
-    try {
-      return await _channel.invokeMethod<bool>(
-              'cancelExport', {'jobId': jobId}) ??
-          false;
-    } catch (_) {
-      return false;
-    }
-  }
+  Future<ExportProgress> poll(String jobId) => gateway.exportProgress(jobId);
 
-  /// Copies the finished file into the phone gallery (Movies/GraceEdit).
-  /// Returns the MediaStore URI, or null when saving is not available.
-  Future<String?> saveToGallery(String path) async {
-    try {
-      return await _channel.invokeMethod<String>('saveToGallery', {
-        'path': path,
-      });
-    } on MissingPluginException {
-      return null;
-    } catch (_) {
-      return null;
-    }
+  Future<bool> cancel(String jobId) => gateway.cancelExport(jobId);
+
+  Future<ExportRecord> finish(
+    Project project,
+    String path,
+    ExportConfiguration config,
+  ) async {
+    final file = File(path);
+    if (!await file.exists()) throw ExportException('output_missing');
+    final size = await file.length();
+    final galleryUri = await gateway.saveToGallery(path);
+    final name = p.basename(path);
+    return ExportRecord(
+      path: galleryUri ?? path,
+      name: name,
+      width: config.width,
+      height: config.height,
+      durationMs: project.durationMs,
+      sizeBytes: size,
+      createdAt: DateTime.now(),
+      inGallery: galleryUri != null,
+    );
   }
 }
