@@ -184,7 +184,14 @@ class EditorController extends ChangeNotifier {
     readOnly = store.projects.any(
       (p) => p.id == _project.id && p.lastExport != null,
     );
-    await store.setSession(projectId: _project.id, clean: false);
+    try {
+      await store.setSession(projectId: _project.id, clean: false);
+    } catch (_) {
+      // Future non attendue (constructeur) : un échec d'écriture de session
+      // ne doit jamais remonter en erreur non gérée. La prochaine
+      // sauvegarde du projet réécrira l'état complet.
+      return;
+    }
     // L'écran peut être fermé pendant l'écriture : ne pas notifier un
     // contrôleur libéré (cela lèverait une exception au retour).
     if (!_disposed) notifyListeners();

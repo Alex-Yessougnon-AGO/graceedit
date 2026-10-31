@@ -105,6 +105,9 @@ class AppStore extends ChangeNotifier {
 
   Future<void> _persist() async {
     final file = await _stateFile();
+    // Le dossier peut avoir disparu (nettoyage, restauration) : on le
+    // recrée plutôt que d'échouer la sauvegarde sur un `rename` orphelin.
+    await file.parent.create(recursive: true);
     final tmp = File('${file.path}.tmp');
     final payload = jsonEncode({
       'settings': settings.toJson(),
