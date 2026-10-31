@@ -30,6 +30,7 @@
   "saveStateSaved": "Enregistré",
   "saveStateSaving": "Enregistrement…",
   "saveStateFailed": "Non enregistré",
+  "projectSaved": "Projet enregistré",
   "toastClipDeleted": "Clip supprimé",
   "toastClipSplit": "Clip scindé",
   "toastTextDeleted": "Texte supprimé",
@@ -344,7 +345,7 @@
   "projectsViewGrid": "Grille",
   "projectsViewList": "Liste",
   "projectsTrash": "Corbeille",
-  "projectsSelectedCount": "{count, plural, =1{1 sélectionné} other{{count} sélectionnés}}",
+  "projectsSelectedCount": "{count, plural, =0{0 sélectionné} =1{1 sélectionné} other{{count} sélectionnés}}",
   "@projectsSelectedCount": {
     "placeholders": {
       "count": {
@@ -364,7 +365,14 @@
       }
     }
   },
-  "projectsDeleteBody": "Ils resteront 30 jours dans la corbeille, puis seront supprimés.",
+  "projectsDeleteBody": "{count, plural, =1{Il restera 30 jours dans la corbeille, puis sera supprimé.} other{Ils resteront 30 jours dans la corbeille, puis seront supprimés.}}",
+  "@projectsDeleteBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "projectsToTrash": "Mettre à la corbeille",
   "projectsDeleteForever": "Supprimer définitivement",
   "projectsDeleteForeverTitle": "Supprimer définitivement ?",
@@ -541,6 +549,35 @@
   "semanticsSelected": "Sélectionné",
   "semanticsUnselected": "Non sélectionné",
   "semanticsPlayhead": "Tête de lecture",
+  "timelineClipLabel": "Clip {index}, durée {duration}",
+  "@timelineClipLabel": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "timelineTextLabel": "Texte : {text}",
+  "@timelineTextLabel": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "timelineAudioLabel": "Musique : {name}",
+  "@timelineAudioLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trimHandleStartLabel": "Poignée de début, faire glisser pour rogner",
+  "trimHandleEndLabel": "Poignée de fin, faire glisser pour rogner",
   "semanticsPosition": "Position {time}",
   "@semanticsPosition": {
     "placeholders": {
@@ -563,13 +600,29 @@
   "unitMinutesShort": "min",
   "unitSecondsShort": "s",
   "dateYesterday": "Hier",
+  "unitMinuteOne": "minute",
+  "unitMinuteOther": "minutes",
+  "unitSecondOne": "seconde",
+  "unitSecondOther": "secondes",
+  "monthJan": "janv.",
+  "monthFeb": "févr.",
+  "monthMar": "mars",
+  "monthApr": "avr.",
+  "monthMay": "mai",
+  "monthJun": "juin",
+  "monthJul": "juil.",
+  "monthAug": "août",
+  "monthSep": "sept.",
+  "monthOct": "oct.",
+  "monthNov": "nov.",
+  "monthDec": "déc.",
   "projectLineLabel": "{title}, {duration}, {when}",
   "importDurationTotal": "Durée totale {duration}",
   "importIgnoredCount": "{count, plural, =1{1 ignoré} other{{count} ignorés}}",
   "importIgnoredNotice": "Le média non pris en charge sera ignoré.",
   "importNoneUsable": "Aucun de ces médias ne peut être utilisé. Ajoutez-en d’autres pour continuer.",
   "importOneVideo": "1 vidéo",
-  "importVideos": "{count} vidéos",
+  "importVideos": "{count, plural, =0{0 vidéo} =1{1 vidéo} other{{count} vidéos}}",
   "welcomeGuarantees": "Garanties",
   "homeEmptyCta": "Monter une vidéo",
   "homeRecentCount": "Récents",
@@ -579,6 +632,7 @@
   "editorTools": "Outils",
   "editorClipTools": "Outils du clip",
   "editorSplitHint": "Placez la tête de lecture à l’intérieur du clip",
+  "editorSelectClipFirst": "Sélectionnez d’abord un clip de la timeline.",
   "editorPreciseTrim": "Rogner précisément",
   "editorDuplicateClip": "Dupliquer le clip",
   "editorAddToTimeline": "Ajouter à la timeline",
@@ -620,6 +674,9 @@
   "audioCustom": "Personnalisé",
   "audioVolumeTitle": "Volume et fondus",
   "audioWaveformHint": "Faites glisser pour déplacer, les poignées pour rogner.",
+  "audioPreparing": "Préparation de l’audio…",
+  "audioUnreadable": "Audio illisible",
+  "audioFadePreview": "Aperçu des fondus",
   "adjustApplied": "Appliqué à {count} clips",
   "adjustResetDone": "Réglages réinitialisés",
   "formatFillHint": "Remplir : l’image est recadrée pour couvrir tout le cadre, sans bandes.",
@@ -632,8 +689,34 @@
   "coverChooseAnother": "Choisir une autre image",
   "coverUseVideoImage": "Utiliser une image de la vidéo",
   "coverFromVideoLabel": "Image de la vidéo",
+  "coverPreviewSemantics": "Aperçu de la couverture à {time}",
+  "@coverPreviewSemantics": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "coverFrameSemantics": "Image à {time}",
+  "@coverFrameSemantics": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "coverForward": "Avancer d’une seconde",
+  "coverBackward": "Reculer d’une seconde",
+  "coverNextImage": "Image suivante",
+  "coverPrevImage": "Image précédente",
+  "coverExtractFailed": "Impossible de lire cette image",
+  "coverCropHintShort": "Glissez pour recadrer",
+  "coverResetAutomatic": "Revenir au choix automatique",
+  "coverPickFailed": "Impossible d’ouvrir le sélecteur d’images.",
+  "coverCopyFailed": "Impossible de copier cette image.",
   "exportEstimatedSize": "Taille estimée : environ {size}",
   "exportStep": "Étape {current} sur {total}",
+  "exportProgressLabel": "Progression de l'export",
   "exportInProgress": "Export en cours",
   "exportGallerySaved": "Dans la galerie de votre téléphone",
   "exportShare": "Partager",

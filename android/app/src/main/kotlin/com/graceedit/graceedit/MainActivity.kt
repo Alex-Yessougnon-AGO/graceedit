@@ -6,7 +6,7 @@ import io.flutter.embedding.engine.FlutterEngine
 class MainActivity : FlutterFragmentActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        ThumbnailPlugin(flutterEngine)
+        ThumbnailPlugin(applicationContext, flutterEngine)
         ExportPlugin(applicationContext, flutterEngine)
         MediaPickerPlugin(this, flutterEngine)
         SystemPlugin(this, flutterEngine)

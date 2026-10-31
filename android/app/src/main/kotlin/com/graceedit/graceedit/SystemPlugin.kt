@@ -75,6 +75,7 @@ class SystemPlugin(
                             try {
                                 result.success(copyImage(Uri.parse(raw), outPath, maxWidth))
                             } catch (e: Exception) {
+                                android.util.Log.e("GraceEdit", "copyImage $raw -> $outPath", e)
                                 result.error("COPY_FAILED", e.message, null)
                             }
                         }
@@ -156,17 +157,29 @@ class SystemPlugin(
     /** Copie une image choisie dans le projet, réduite à [maxWidth]. */
     private fun copyImage(uri: Uri, outPath: String, maxWidth: Int): String {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        activity.contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null, bounds)
-        } ?: throw IllegalStateException("Image illisible.")
+        // Le décodage des bornes renvoie toujours un bitmap null : tester le
+        // résultat de `use` revenait à rejeter toutes les images.
+        val boundsStream = activity.contentResolver.openInputStream(uri)
+            ?: throw IllegalStateException("Image illisible.")
+        boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0) throw IllegalStateException("Image illisible.")
 
         var sample = 1
         while (bounds.outWidth / (sample * 2) >= maxWidth) sample *= 2
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        val decoded = activity.contentResolver.openInputStream(uri)?.use {
+        var decoded: Bitmap = activity.contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, options)
-        } ?: throw IllegalStateException("Image illisible.")
+        } ?: decodeWithImageDecoder(uri, maxWidth)
+        ?: throw IllegalStateException("Image illisible.")
+
+        // Orientation EXIF : sans elle, une photo portrait choisie en
+        // couverture s'affichait couchée (HEIC des appareils récents
+        // notamment, que BitmapFactory décode sans appliquer la rotation).
+        val oriented = applyExifOrientation(uri, decoded)
+        if (oriented !== decoded) {
+            decoded.recycle()
+            decoded = oriented
+        }
 
         val scaled = if (decoded.width > maxWidth) {
             val ratio = maxWidth.toFloat() / decoded.width
@@ -186,5 +199,66 @@ class SystemPlugin(
         if (scaled !== decoded) decoded.recycle()
         scaled.recycle()
         return outPath
+    }
+
+    /** Repli API 28+ quand BitmapFactory ne sait pas décoder le format. */
+    private fun decodeWithImageDecoder(uri: Uri, maxWidth: Int): Bitmap? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+        return try {
+            val source = android.graphics.ImageDecoder.createSource(
+                activity.contentResolver,
+                uri,
+            )
+            android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                val size = info.size
+                if (size.width > maxWidth) {
+                    val ratio = maxWidth.toFloat() / size.width
+                    decoder.setTargetSize(
+                        maxWidth,
+                        (size.height * ratio).toInt().coerceAtLeast(1),
+                    )
+                }
+                decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun applyExifOrientation(uri: Uri, bitmap: Bitmap): Bitmap {
+        val orientation = try {
+            activity.contentResolver.openInputStream(uri)?.use { stream ->
+                android.media.ExifInterface(stream).getAttributeInt(
+                    android.media.ExifInterface.TAG_ORIENTATION,
+                    android.media.ExifInterface.ORIENTATION_NORMAL,
+                )
+            } ?: android.media.ExifInterface.ORIENTATION_NORMAL
+        } catch (_: Exception) {
+            android.media.ExifInterface.ORIENTATION_NORMAL
+        }
+        val matrix = android.graphics.Matrix()
+        when (orientation) {
+            android.media.ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            android.media.ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            android.media.ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            android.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL ->
+                matrix.postScale(-1f, 1f)
+            android.media.ExifInterface.ORIENTATION_FLIP_VERTICAL ->
+                matrix.postScale(1f, -1f)
+            android.media.ExifInterface.ORIENTATION_TRANSPOSE -> {
+                matrix.postRotate(90f)
+                matrix.postScale(-1f, 1f)
+            }
+            android.media.ExifInterface.ORIENTATION_TRANSVERSE -> {
+                matrix.postRotate(270f)
+                matrix.postScale(-1f, 1f)
+            }
+            else -> return bitmap
+        }
+        return try {
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        } catch (_: Exception) {
+            bitmap
+        }
     }
 }

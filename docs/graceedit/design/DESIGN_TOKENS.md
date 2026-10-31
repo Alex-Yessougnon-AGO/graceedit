@@ -69,8 +69,5 @@ Sobre. Respecter le réglage « Réduire les animations ». Fondu d'entrée d'é
 ## À ne jamais faire
 Dégradés · ombres portées · effets 3D, verre dépoli, flou · lueurs · couleur d'accent comme bouton ou comme erreur · information portée par la couleur seule · bouton sans action · données factices présentées comme réelles.
 
-## Icônes
-Trait de 2 dp, extrémités arrondies, grille de 24 dp. Les maquettes en contiennent un jeu complet (retour, fermer, plus, recherche, liste, deux colonnes, ⋮, partager, galerie, lecture, pause, annuler, rétablir, scinder, volume, fondu, recadrer, texte, musique, curseurs, corbeille, copier, modifier, exporter, avertissement, information, coche). Utiliser un jeu d'icônes libre de droits de style équivalent ou redessiner ces formes.
-
-## Logo
-Fichiers dans `design/logo/` : symbole (« G » avec bloc détaché), version principale, versions monochromes noire et blanche. Taille minimale du symbole : 16 px. Voir `design/logo/`.
+## Icônes, logo, icône d'application
+Voir `ASSETS_APPLICATION.md`. Jeu de 42 icônes SVG dans `design/icones/` (trait de 2 dp, grille de 24 dp, extrémités arrondies).

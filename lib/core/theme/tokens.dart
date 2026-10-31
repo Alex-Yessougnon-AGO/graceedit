@@ -123,6 +123,9 @@ abstract final class GraceDims {
   static const preview = 260.0;
   static const playLine = 48.0;
   static const ruler = 22.0;
+
+  /// Échelle de départ de la timeline : 1,2 dp par seconde (SPEC EDT-01).
+  static const timelinePxPerSec = 1.2;
   static const videoTrack = 72.0;
   static const subTrack = 40.0;
   static const playheadLine = 2.0;

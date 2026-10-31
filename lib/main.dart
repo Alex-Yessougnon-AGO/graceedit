@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/l10n/generated/app_localizations.dart';
+import 'core/models/settings.dart';
 import 'core/router/app_router.dart';
+import 'core/state/providers.dart';
 import 'core/theme/app_theme.dart';
 
 /// Point d'entrée principal de l'application GraceEdit V1.
@@ -12,11 +14,12 @@ import 'core/theme/app_theme.dart';
 /// du bootstrap. On n'affiche donc qu'un seul splash perçu.
 void main() => runApp(const ProviderScope(child: GraceEditApp()));
 
-class GraceEditApp extends StatelessWidget {
+class GraceEditApp extends ConsumerWidget {
   const GraceEditApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
     return MaterialApp.router(
       routerDelegate: router.routerDelegate,
       routeInformationParser: router.routeInformationParser,
@@ -24,7 +27,15 @@ class GraceEditApp extends StatelessWidget {
       title: 'GraceEdit',
       theme: buildGraceTheme(Brightness.light),
       darkTheme: buildGraceTheme(Brightness.dark),
-      themeMode: ThemeMode.system,
+      themeMode: switch (settings.theme) {
+        AppThemeMode.light => ThemeMode.light,
+        AppThemeMode.dark => ThemeMode.dark,
+        AppThemeMode.system => ThemeMode.system,
+      },
+      locale: switch (settings.language) {
+        AppLanguage.fr => const Locale('fr', 'FR'),
+        AppLanguage.en => const Locale('en', 'US'),
+      },
       supportedLocales: const [Locale('fr', 'FR'), Locale('en', 'US')],
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       debugShowCheckedModeBanner: false,

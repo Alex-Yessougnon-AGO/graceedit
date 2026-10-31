@@ -165,15 +165,36 @@ class MediaPickerPlugin(
         }
     }
 
+    /**
+     * Type effectif du média. Certains fournisseurs (nuages, gestionnaires
+     * de fichiers) renvoient un type vide ou `application/octet-stream`
+     * pour des images parfaitement lisibles (HEIC, AVIF, WebP…) : on se
+     * rabat alors sur l'extension du nom, puis sur le décodage lui-même.
+     */
+    private fun effectiveMime(uri: Uri, name: String, raw: String): String {
+        if (raw.isNotEmpty() && raw != "application/octet-stream") return raw
+        val extension = name.substringAfterLast('.', "").lowercase()
+        val byExtension = android.webkit.MimeTypeMap.getSingleton()
+            .getMimeTypeFromExtension(extension)
+        return byExtension ?: raw
+    }
+
     /** Métadonnées réelles du média ; null si le fichier est illisible. */
     private fun describe(uri: Uri): Map<String, Any?>? {
-        val mime = activity.contentResolver.getType(uri) ?: ""
+        val name = displayName(uri) ?: uri.lastPathSegment ?: ""
+        var mime = effectiveMime(uri, name, activity.contentResolver.getType(uri) ?: "")
         var durationMs = 0L
         var width = 0
         var height = 0
         var capturedAt: Long? = null
 
-        if (mime.startsWith("image/")) {
+        // Une image se reconnaît à son décodage, pas seulement à son type
+        // déclaré : c'est ce qui rejetait les formats dont le fournisseur
+        // n'annonçait pas le MIME.
+        val looksImage = mime.startsWith("image/") ||
+            !(mime.startsWith("video/") || mime.startsWith("audio/"))
+        if (looksImage) {
+            var decodedMime: String? = null
             try {
                 val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 activity.contentResolver.openInputStream(uri)?.use {
@@ -181,11 +202,20 @@ class MediaPickerPlugin(
                 }
                 width = options.outWidth
                 height = options.outHeight
+                decodedMime = options.outMimeType
             } catch (_: Exception) {
-                return null
+                width = 0
+                height = 0
             }
-            if (width <= 0 || height <= 0) return null
-        } else {
+            if (width > 0 && height > 0) {
+                if (!mime.startsWith("image/") && !decodedMime.isNullOrEmpty()) {
+                    mime = decodedMime
+                }
+                return mediaMap(uri, name, mime, 0L, width, height, null)
+            }
+            if (mime.startsWith("image/")) return null
+        }
+        run {
             val retriever = MediaMetadataRetriever()
             try {
                 retriever.setDataSource(activity, uri)
@@ -220,7 +250,23 @@ class MediaPickerPlugin(
             if (durationMs <= 0) return null
         }
 
-        val name = displayName(uri) ?: uri.lastPathSegment ?: ""
+        // Type toujours inconnu mais métadonnées réelles : la présence
+        // d'une image tranche entre vidéo et audio.
+        if (!mime.startsWith("video/") && !mime.startsWith("audio/")) {
+            mime = if (width > 0 && height > 0) "video/mp4" else "audio/mpeg"
+        }
+        return mediaMap(uri, name, mime, durationMs, width, height, capturedAt)
+    }
+
+    private fun mediaMap(
+        uri: Uri,
+        name: String,
+        mime: String,
+        durationMs: Long,
+        width: Int,
+        height: Int,
+        capturedAt: Long?,
+    ): Map<String, Any?> {
         val supported = mime.startsWith("video/") ||
             mime.startsWith("audio/") ||
             mime.startsWith("image/")
@@ -239,12 +285,17 @@ class MediaPickerPlugin(
 
     private fun parseDate(raw: String?): Long? {
         if (raw.isNullOrBlank()) return null
-        return try {
+        val time = try {
             val format = SimpleDateFormat("yyyyMMdd'T'HHmmss.SSS'Z'", Locale.US)
             format.timeZone = TimeZone.getTimeZone("UTC")
             format.parse(raw)?.time
         } catch (_: Exception) {
             null
-        }
+        } ?: return null
+        // Sans date, certains fichiers renvoient l'époque CoreMedia
+        // (1er janvier 1904) : ce n'est pas une date réelle, on ne l'affiche
+        // pas. Une date dans le futur n'en est pas une non plus.
+        val plausible = time >= 946684800000L && time <= System.currentTimeMillis() + 86_400_000L
+        return if (plausible) time else null
     }
 }

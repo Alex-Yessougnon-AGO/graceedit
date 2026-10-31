@@ -36,17 +36,17 @@ Une feuille de bas d'écran **non modale** : l'aperçu et le texte sélectionné
 
 | Onglet | Contenu |
 |---|---|
-| Style | Préréglages, alignement (gauche, centré, droite), rotation par pas de 15°, position par grille de 9 emplacements |
-| Police | Quelques polices, chacune affichée dans son propre dessin |
+| Style (`edt03-onglet-style-*`) | Préréglages ; **alignement** (gauche, centré, droite) ; **position verticale** (haut, centre, bas) ; **rotation** par pas de 15° (boutons − et +) |
+| Police (`edt03-onglet-police-*`) | Grille de six polices, chacune affichée dans son propre dessin avec son nom ; la police choisie porte une coche et un contour |
 | **Couleur** (dessiné) | Six pastilles, curseur « Taille », curseur « Opacité » |
-| Fond | Aucun, léger, plein, et la couleur du fond |
+| Fond (`edt03-onglet-fond-*`) | Choix **Aucun / Léger / Plein**, six couleurs de fond, curseur « Opacité du fond » |
 
-Les onglets Style, Police et Fond sont décrits ici mais non dessinés.
+Les quatre onglets sont dessinés : Couleur (`edt03-style-*`), Style, Police et Fond (`edt03-onglet-*`). Polices proposées au départ (toutes sous licence libre SIL OFL, **à valider avant publication** : licence de chaque fichier, accents français, couverture des alphabets) : Inter, Playfair Display, Bebas Neue, Caveat, Lora, Pacifico.
 
 - **Couleur** : six pastilles de 52 dp de large, de sorte que chaque cible atteigne les 48 dp. La couleur choisie porte une coche et un anneau.
 - **Taille** : le curseur est l'**alternative accessible au pincement**. La valeur est affichée (« 28 »).
 - **Opacité** : de 0 à 100 %.
-- La grille de position (onglet Style) et la rotation par pas sont les alternatives accessibles au glisser et à la poignée de rotation.
+- Les choix d'**alignement** et de **position verticale** (neuf positions possibles) et la **rotation par pas de 15°** (onglet Style) sont les alternatives accessibles au glisser et à la poignée de rotation.
 
 ## Règles
 - **Durée par défaut** : 3 secondes, à la tête de lecture.
@@ -79,4 +79,4 @@ Les onglets Style, Police et Fond sont décrits ici mais non dessinés.
 - **Limite de longueur** d'un texte : à définir.
 - **Zones de sécurité** des plateformes (interfaces superposées aux vidéos) : une aide visuelle est possible plus tard, absente de la V1.
 - **Zoom automatique à l'ajout** : à valider en test (le saut de zoom peut désorienter).
-- **Onglets non dessinés** : Style, Police, Fond.
+- **Fond du texte** : arrondi du fond et marges ; non prévus en V1.

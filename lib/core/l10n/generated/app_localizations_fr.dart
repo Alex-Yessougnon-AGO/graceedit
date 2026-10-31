@@ -100,6 +100,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get saveStateFailed => 'Non enregistré';
 
   @override
+  String get projectSaved => 'Projet enregistré';
+
+  @override
   String get toastClipDeleted => 'Clip supprimé';
 
   @override
@@ -828,6 +831,7 @@ class AppLocalizationsFr extends AppLocalizations {
       locale: localeName,
       other: '$count sélectionnés',
       one: '1 sélectionné',
+      zero: '0 sélectionné',
     );
     return '$_temp0';
   }
@@ -856,8 +860,15 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get projectsDeleteBody =>
-      'Ils resteront 30 jours dans la corbeille, puis seront supprimés.';
+  String projectsDeleteBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ils resteront 30 jours dans la corbeille, puis seront supprimés.',
+      one: 'Il restera 30 jours dans la corbeille, puis sera supprimé.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get projectsToTrash => 'Mettre à la corbeille';
@@ -1268,6 +1279,28 @@ class AppLocalizationsFr extends AppLocalizations {
   String get semanticsPlayhead => 'Tête de lecture';
 
   @override
+  String timelineClipLabel(int index, String duration) {
+    return 'Clip $index, durée $duration';
+  }
+
+  @override
+  String timelineTextLabel(String text) {
+    return 'Texte : $text';
+  }
+
+  @override
+  String timelineAudioLabel(String name) {
+    return 'Musique : $name';
+  }
+
+  @override
+  String get trimHandleStartLabel =>
+      'Poignée de début, faire glisser pour rogner';
+
+  @override
+  String get trimHandleEndLabel => 'Poignée de fin, faire glisser pour rogner';
+
+  @override
   String semanticsPosition(String time) {
     return 'Position $time';
   }
@@ -1332,6 +1365,54 @@ class AppLocalizationsFr extends AppLocalizations {
   String get dateYesterday => 'Hier';
 
   @override
+  String get unitMinuteOne => 'minute';
+
+  @override
+  String get unitMinuteOther => 'minutes';
+
+  @override
+  String get unitSecondOne => 'seconde';
+
+  @override
+  String get unitSecondOther => 'secondes';
+
+  @override
+  String get monthJan => 'janv.';
+
+  @override
+  String get monthFeb => 'févr.';
+
+  @override
+  String get monthMar => 'mars';
+
+  @override
+  String get monthApr => 'avr.';
+
+  @override
+  String get monthMay => 'mai';
+
+  @override
+  String get monthJun => 'juin';
+
+  @override
+  String get monthJul => 'juil.';
+
+  @override
+  String get monthAug => 'août';
+
+  @override
+  String get monthSep => 'sept.';
+
+  @override
+  String get monthOct => 'oct.';
+
+  @override
+  String get monthNov => 'nov.';
+
+  @override
+  String get monthDec => 'déc.';
+
+  @override
   String projectLineLabel(Object duration, Object title, Object when) {
     return '$title, $duration, $when';
   }
@@ -1363,8 +1444,15 @@ class AppLocalizationsFr extends AppLocalizations {
   String get importOneVideo => '1 vidéo';
 
   @override
-  String importVideos(Object count) {
-    return '$count vidéos';
+  String importVideos(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vidéos',
+      one: '1 vidéo',
+      zero: '0 vidéo',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1394,6 +1482,10 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get editorSplitHint =>
       'Placez la tête de lecture à l’intérieur du clip';
+
+  @override
+  String get editorSelectClipFirst =>
+      'Sélectionnez d’abord un clip de la timeline.';
 
   @override
   String get editorPreciseTrim => 'Rogner précisément';
@@ -1520,6 +1612,15 @@ class AppLocalizationsFr extends AppLocalizations {
       'Faites glisser pour déplacer, les poignées pour rogner.';
 
   @override
+  String get audioPreparing => 'Préparation de l’audio…';
+
+  @override
+  String get audioUnreadable => 'Audio illisible';
+
+  @override
+  String get audioFadePreview => 'Aperçu des fondus';
+
+  @override
   String adjustApplied(Object count) {
     return 'Appliqué à $count clips';
   }
@@ -1559,6 +1660,43 @@ class AppLocalizationsFr extends AppLocalizations {
   String get coverFromVideoLabel => 'Image de la vidéo';
 
   @override
+  String coverPreviewSemantics(String time) {
+    return 'Aperçu de la couverture à $time';
+  }
+
+  @override
+  String coverFrameSemantics(String time) {
+    return 'Image à $time';
+  }
+
+  @override
+  String get coverForward => 'Avancer d’une seconde';
+
+  @override
+  String get coverBackward => 'Reculer d’une seconde';
+
+  @override
+  String get coverNextImage => 'Image suivante';
+
+  @override
+  String get coverPrevImage => 'Image précédente';
+
+  @override
+  String get coverExtractFailed => 'Impossible de lire cette image';
+
+  @override
+  String get coverCropHintShort => 'Glissez pour recadrer';
+
+  @override
+  String get coverResetAutomatic => 'Revenir au choix automatique';
+
+  @override
+  String get coverPickFailed => 'Impossible d’ouvrir le sélecteur d’images.';
+
+  @override
+  String get coverCopyFailed => 'Impossible de copier cette image.';
+
+  @override
   String exportEstimatedSize(Object size) {
     return 'Taille estimée : environ $size';
   }
@@ -1567,6 +1705,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String exportStep(Object current, Object total) {
     return 'Étape $current sur $total';
   }
+
+  @override
+  String get exportProgressLabel => 'Progression de l\'export';
 
   @override
   String get exportInProgress => 'Export en cours';

@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 
+import '../../features/editor/cover_screen.dart';
 import '../../features/editor/editor_screen.dart';
 import '../../features/export/export_screen.dart';
 import '../../features/home/home_screen.dart';
@@ -23,6 +24,9 @@ import '../../features/welcome/welcome_screen.dart';
 /// des routes de premier niveau.
 final GoRouter router = GoRouter(
   initialLocation: '/splash',
+  // Route inconnue (lien profond invalide) : retomber sur l'accueil plutôt
+  // que sur l'écran d'erreur brut de GoRouter.
+  errorBuilder: (context, state) => const HomeScreen(),
   routes: <RouteBase>[
     GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
     GoRoute(
@@ -46,6 +50,11 @@ final GoRouter router = GoRouter(
       path: '/editor/:projectId',
       builder: (context, state) =>
           EditorScreen(projectId: state.pathParameters['projectId'] ?? ''),
+    ),
+    GoRoute(
+      path: '/editor/:projectId/cover',
+      builder: (context, state) =>
+          CoverScreen(projectId: state.pathParameters['projectId'] ?? ''),
     ),
     GoRoute(
       path: '/export/:projectId',

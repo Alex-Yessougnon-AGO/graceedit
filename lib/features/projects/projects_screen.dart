@@ -8,6 +8,7 @@ import '../../core/models/settings.dart';
 import '../../core/state/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/ui/back_scope.dart';
 import '../../core/ui/buttons.dart';
 import '../../core/ui/controls.dart';
 import '../../core/ui/messages.dart';
@@ -76,7 +77,9 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
       } else {
         _selected.add(id);
       }
-      _selecting = true;
+      // Désélectionner le dernier élément quitte le mode sélection : sinon
+      // l'écran reste bloqué avec un compteur à 0 et des actions éteintes.
+      _selecting = _selected.isNotEmpty;
     });
   }
 
@@ -122,194 +125,226 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     await store.setSettings(store.settings.copyWith(sort: value));
   }
 
+  /// Ferme la recherche puis la sélection avant de quitter l'écran.
+  bool _onBack() {
+    if (_searching) {
+      setState(() {
+        _searching = false;
+        _search.clear();
+      });
+      return true;
+    }
+    if (_selecting) {
+      _exitSelection();
+      return true;
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = ref.watch(storeProvider);
     final l10n = AppLocalizations.of(context);
     final p = context.grace;
     final all = store.activeProjects;
+    // Réconcilie la sélection avec les données : un projet mis à la
+    // corbeille, restauré ou supprimé ailleurs ne doit pas rester coché.
+    _selected.retainWhere((id) => all.any((project) => project.id == id));
     final projects = _visible(all);
     final grid = store.settings.view == ProjectView.grid;
 
-    return Scaffold(
-      backgroundColor: p.background,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            if (_searching)
-              _SearchBar(
-                controller: _search,
-                onClose: () {
-                  setState(() {
-                    _searching = false;
-                    _search.clear();
-                  });
-                },
-                onChanged: (_) => setState(() {}),
-              )
-            else if (_selecting)
-              _SelectionBar(
-                count: _selected.length,
-                allSelected:
-                    projects.isNotEmpty && _selected.length == projects.length,
-                onClose: _exitSelection,
-                onSelectAll: () {
-                  setState(() {
-                    if (_selected.length == projects.length) {
-                      _selected.clear();
-                    } else {
-                      _selected
-                        ..clear()
-                        ..addAll(projects.map((e) => e.id));
-                    }
-                  });
-                },
-              )
-            else
-              _ProjectsBar(
-                grid: grid,
-                onSearch: () => setState(() => _searching = true),
-                onToggleView: () {
-                  store.setSettings(
-                    store.settings.copyWith(
-                      view: grid ? ProjectView.list : ProjectView.grid,
-                    ),
-                  );
-                },
-                onMenu: _showMenu,
-              ),
-            if (!_searching && !_selecting)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
-                child: Row(
-                  children: [
-                    InkWell(
-                      onTap: _sort,
-                      borderRadius: BorderRadius.circular(20),
-                      child: Semantics(
-                        button: true,
-                        label: l10n.projectsSort,
-                        child: Container(
-                          // Zone tactile de 48 dp minimum (règle 6).
-                          constraints: const BoxConstraints(
-                            minHeight: GraceDims.touch,
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: BoxDecoration(
-                            color: p.surface,
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  switch (store.settings.sort) {
-                                    SortOrder.recent => l10n.projectsSortRecent,
-                                    SortOrder.oldest => l10n.projectsSortOldest,
-                                    SortOrder.name => l10n.projectsSortName,
-                                  },
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GraceType.secondaryMedium,
+    return GraceBackScope(
+      onBack: _onBack,
+      child: Scaffold(
+        backgroundColor: p.background,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              if (_searching)
+                _SearchBar(
+                  controller: _search,
+                  onClose: () {
+                    setState(() {
+                      _searching = false;
+                      _search.clear();
+                    });
+                  },
+                  onChanged: (_) => setState(() {}),
+                )
+              else if (_selecting)
+                _SelectionBar(
+                  count: _selected.length,
+                  allSelected:
+                      projects.isNotEmpty &&
+                      projects.every((e) => _selected.contains(e.id)),
+                  onClose: _exitSelection,
+                  onSelectAll: () {
+                    setState(() {
+                      final allVisible =
+                          projects.isNotEmpty &&
+                          projects.every((e) => _selected.contains(e.id));
+                      if (allVisible) {
+                        _selecting = false;
+                        _selected.clear();
+                      } else {
+                        _selecting = true;
+                        _selected
+                          ..clear()
+                          ..addAll(projects.map((e) => e.id));
+                      }
+                    });
+                  },
+                )
+              else
+                _ProjectsBar(
+                  grid: grid,
+                  onSearch: () => setState(() => _searching = true),
+                  onToggleView: () {
+                    store.setSettings(
+                      store.settings.copyWith(
+                        view: grid ? ProjectView.list : ProjectView.grid,
+                      ),
+                    );
+                  },
+                  onMenu: _showMenu,
+                ),
+              if (!_searching && !_selecting)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
+                  child: Row(
+                    children: [
+                      InkWell(
+                        onTap: _sort,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Semantics(
+                          button: true,
+                          label: l10n.projectsSort,
+                          child: Container(
+                            // Zone tactile de 48 dp minimum (règle 6).
+                            constraints: const BoxConstraints(
+                              minHeight: GraceDims.touch,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            decoration: BoxDecoration(
+                              color: p.surface,
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    switch (store.settings.sort) {
+                                      SortOrder.recent =>
+                                        l10n.projectsSortRecent,
+                                      SortOrder.oldest =>
+                                        l10n.projectsSortOldest,
+                                      SortOrder.name => l10n.projectsSortName,
+                                    },
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GraceType.secondaryMedium,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                              const Icon(Icons.keyboard_arrow_down, size: 18),
-                            ],
+                                const SizedBox(width: 6),
+                                const Icon(Icons.keyboard_arrow_down, size: 18),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        l10n.projectsCount(projects.length),
-                        textAlign: TextAlign.end,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GraceType.secondary.copyWith(color: p.secondary),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          l10n.projectsCount(projects.length),
+                          textAlign: TextAlign.end,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: GraceType.secondary.copyWith(
+                            color: p.secondary,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: projects.isEmpty
+                    ? _EmptyProjects(
+                        searching: _searching && _search.text.trim().isNotEmpty,
+                        onStart: _newProject,
+                      )
+                    : grid
+                    ? _ProjectsGrid(
+                        projects: projects,
+                        selected: _selected,
+                        selecting: _selecting,
+                        onOpen: _open,
+                        onLongPress: (project) {
+                          if (_selecting) {
+                            _toggleSelection(project.id);
+                          } else {
+                            setState(() {
+                              _selecting = true;
+                              _selected.add(project.id);
+                            });
+                          }
+                        },
+                        onMenu: _showActions,
+                        onSelect: _toggleSelection,
+                      )
+                    : _ProjectsList(
+                        projects: projects,
+                        selected: _selected,
+                        selecting: _selecting,
+                        onOpen: _open,
+                        onLongPress: (project) {
+                          if (_selecting) {
+                            _toggleSelection(project.id);
+                          } else {
+                            setState(() {
+                              _selecting = true;
+                              _selected.add(project.id);
+                            });
+                          }
+                        },
+                        onMenu: _showActions,
+                        onSelect: _toggleSelection,
+                      ),
+              ),
+            ],
+          ),
+        ),
+        bottomNavigationBar: _selecting
+            ? _SelectionActions(
+                enabled: _selected.isNotEmpty,
+                onDuplicate: _duplicateSelected,
+                onDelete: _deleteSelected,
+              )
+            : GraceNavBar(
+                current: GraceTab.projects,
+                onSelect: (tab) {
+                  switch (tab) {
+                    case GraceTab.home:
+                      context.go('/home');
+                    case GraceTab.projects:
+                      break;
+                    case GraceTab.settings:
+                      context.go('/settings');
+                  }
+                },
+              ),
+        floatingActionButton: _selecting || _searching
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GraceExtendedFab(
+                  label: l10n.homeNewProject,
+                  onPressed: _newProject,
                 ),
               ),
-            Expanded(
-              child: projects.isEmpty
-                  ? _EmptyProjects(
-                      searching: _searching && _search.text.trim().isNotEmpty,
-                      onStart: _newProject,
-                    )
-                  : grid
-                  ? _ProjectsGrid(
-                      projects: projects,
-                      selected: _selected,
-                      selecting: _selecting,
-                      onOpen: _open,
-                      onLongPress: (project) {
-                        if (_selecting) {
-                          _toggleSelection(project.id);
-                        } else {
-                          setState(() {
-                            _selecting = true;
-                            _selected.add(project.id);
-                          });
-                        }
-                      },
-                      onMenu: _showActions,
-                      onSelect: _toggleSelection,
-                    )
-                  : _ProjectsList(
-                      projects: projects,
-                      selected: _selected,
-                      selecting: _selecting,
-                      onOpen: _open,
-                      onLongPress: (project) {
-                        if (_selecting) {
-                          _toggleSelection(project.id);
-                        } else {
-                          setState(() {
-                            _selecting = true;
-                            _selected.add(project.id);
-                          });
-                        }
-                      },
-                      onMenu: _showActions,
-                      onSelect: _toggleSelection,
-                    ),
-            ),
-          ],
-        ),
       ),
-      bottomNavigationBar: _selecting
-          ? _SelectionActions(
-              enabled: _selected.isNotEmpty,
-              onDuplicate: _duplicateSelected,
-              onDelete: _deleteSelected,
-            )
-          : GraceNavBar(
-              current: GraceTab.projects,
-              onSelect: (tab) {
-                switch (tab) {
-                  case GraceTab.home:
-                    context.go('/home');
-                  case GraceTab.projects:
-                    break;
-                  case GraceTab.settings:
-                    context.go('/settings');
-                }
-              },
-            ),
-      floatingActionButton: _selecting || _searching
-          ? null
-          : Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: GraceExtendedFab(
-                label: l10n.homeNewProject,
-                onPressed: _newProject,
-              ),
-            ),
     );
   }
 
@@ -519,7 +554,8 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
       context: context,
       builder: (dialogContext) => GraceDialog(
         title: l10n.projectsDeleteTitle(ids.length),
-        body: '${l10n.projectsDeleteBody}\n\n${l10n.projectsDeleteSafeNote}',
+        body:
+            '${l10n.projectsDeleteBody(ids.length)}\n\n${l10n.projectsDeleteSafeNote}',
         actions: [
           GraceDialogAction(
             label: l10n.projectsToTrash,

@@ -100,6 +100,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saveStateFailed => 'Not saved';
 
   @override
+  String get projectSaved => 'Project saved';
+
+  @override
   String get toastClipDeleted => 'Clip deleted';
 
   @override
@@ -819,6 +822,7 @@ class AppLocalizationsEn extends AppLocalizations {
       locale: localeName,
       other: '$count selected',
       one: '1 selected',
+      zero: '0 selected',
     );
     return '$_temp0';
   }
@@ -847,8 +851,15 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get projectsDeleteBody =>
-      'They stay 30 days in the trash, then they are deleted.';
+  String projectsDeleteBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'They stay 30 days in the trash, then they are deleted.',
+      one: 'It stays 30 days in the trash, then it is deleted.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get projectsToTrash => 'Move to trash';
@@ -1256,6 +1267,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get semanticsPlayhead => 'Playhead';
 
   @override
+  String timelineClipLabel(int index, String duration) {
+    return 'Clip $index, duration $duration';
+  }
+
+  @override
+  String timelineTextLabel(String text) {
+    return 'Text: $text';
+  }
+
+  @override
+  String timelineAudioLabel(String name) {
+    return 'Music: $name';
+  }
+
+  @override
+  String get trimHandleStartLabel => 'Start handle, drag to trim';
+
+  @override
+  String get trimHandleEndLabel => 'End handle, drag to trim';
+
+  @override
   String semanticsPosition(String time) {
     return 'Position $time';
   }
@@ -1320,6 +1352,54 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dateYesterday => 'Yesterday';
 
   @override
+  String get unitMinuteOne => 'minute';
+
+  @override
+  String get unitMinuteOther => 'minutes';
+
+  @override
+  String get unitSecondOne => 'second';
+
+  @override
+  String get unitSecondOther => 'seconds';
+
+  @override
+  String get monthJan => 'Jan';
+
+  @override
+  String get monthFeb => 'Feb';
+
+  @override
+  String get monthMar => 'Mar';
+
+  @override
+  String get monthApr => 'Apr';
+
+  @override
+  String get monthMay => 'May';
+
+  @override
+  String get monthJun => 'Jun';
+
+  @override
+  String get monthJul => 'Jul';
+
+  @override
+  String get monthAug => 'Aug';
+
+  @override
+  String get monthSep => 'Sep';
+
+  @override
+  String get monthOct => 'Oct';
+
+  @override
+  String get monthNov => 'Nov';
+
+  @override
+  String get monthDec => 'Dec';
+
+  @override
   String projectLineLabel(Object duration, Object title, Object when) {
     return '$title, $duration, $when';
   }
@@ -1351,8 +1431,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get importOneVideo => '1 video';
 
   @override
-  String importVideos(Object count) {
-    return '$count videos';
+  String importVideos(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count videos',
+      one: '1 video',
+      zero: '0 videos',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1381,6 +1468,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editorSplitHint => 'Place the playhead inside the clip';
+
+  @override
+  String get editorSelectClipFirst => 'Select a clip on the timeline first.';
 
   @override
   String get editorPreciseTrim => 'Trim precisely';
@@ -1503,8 +1593,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get audioVolumeTitle => 'Volume and fades';
 
   @override
-  String get audioWaveformHint =>
-      'Faites glisser pour déplacer, les poignées pour rogner.';
+  String get audioWaveformHint => 'Drag to move, use the handles to trim.';
+
+  @override
+  String get audioPreparing => 'Preparing audio…';
+
+  @override
+  String get audioUnreadable => 'Unreadable audio';
+
+  @override
+  String get audioFadePreview => 'Fade preview';
 
   @override
   String adjustApplied(Object count) {
@@ -1512,17 +1610,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get adjustResetDone => 'Réglages réinitialisés';
+  String get adjustResetDone => 'Settings reset';
 
   @override
   String get formatFillHint =>
       'Fill: the image is cropped to cover the whole frame, no bars.';
 
   @override
-  String get cropFree => 'Libre';
+  String get cropFree => 'Free';
 
   @override
-  String get cropGridLabel => 'Grille des tiers';
+  String get cropGridLabel => 'Rule of thirds';
 
   @override
   String get coverImageInProjects => 'In your projects';
@@ -1546,6 +1644,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String get coverFromVideoLabel => 'Video frame';
 
   @override
+  String coverPreviewSemantics(String time) {
+    return 'Cover preview at $time';
+  }
+
+  @override
+  String coverFrameSemantics(String time) {
+    return 'Frame at $time';
+  }
+
+  @override
+  String get coverForward => 'Forward one second';
+
+  @override
+  String get coverBackward => 'Back one second';
+
+  @override
+  String get coverNextImage => 'Next frame';
+
+  @override
+  String get coverPrevImage => 'Previous frame';
+
+  @override
+  String get coverExtractFailed => 'Can\'t read this image';
+
+  @override
+  String get coverCropHintShort => 'Drag to crop';
+
+  @override
+  String get coverResetAutomatic => 'Back to automatic choice';
+
+  @override
+  String get coverPickFailed => 'Can\'t open the image picker.';
+
+  @override
+  String get coverCopyFailed => 'Can\'t copy this image.';
+
+  @override
   String exportEstimatedSize(Object size) {
     return 'Estimated size: about $size';
   }
@@ -1556,13 +1691,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get exportProgressLabel => 'Export progress';
+
+  @override
   String get exportInProgress => 'Export in progress';
 
   @override
   String get exportGallerySaved => 'In your phone gallery';
 
   @override
-  String get exportShare => 'Partager';
+  String get exportShare => 'Share';
 
   @override
   String get exportKeepEditing => 'Keep editing';
@@ -1623,9 +1761,9 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count projets',
-      one: '1 projet',
-      zero: 'Aucun projet',
+      other: '$count projects',
+      one: '1 project',
+      zero: 'No projects',
     );
     return '$_temp0';
   }

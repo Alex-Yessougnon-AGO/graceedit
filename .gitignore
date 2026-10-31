@@ -54,3 +54,4 @@ temp_interactive_push.bat
 
 # Artefact local de navigation (ne contient aucun secret, ne doit pas être versionné)
 cookies.json
+.qa-home/

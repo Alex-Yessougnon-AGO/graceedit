@@ -7,6 +7,7 @@ import '../../core/models/project.dart';
 import '../../core/state/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/ui/back_scope.dart';
 import '../../core/ui/buttons.dart';
 import '../../core/ui/controls.dart';
 import '../../core/ui/messages.dart';
@@ -92,7 +93,31 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
     if (ok != true) return;
     await store.deletePermanently(ids);
     if (!mounted) return;
+    // Vider la corbeille annule aussi la sélection : sinon des identifiants
+    // fantômes restent cochés sur une liste vide.
+    setState(() {
+      _selected.clear();
+      _selecting = false;
+    });
     GraceToast.show(context, l10n.trashPurged);
+  }
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selected.contains(id)) {
+        _selected.remove(id);
+      } else {
+        _selected.add(id);
+      }
+      _selecting = _selected.isNotEmpty;
+    });
+  }
+
+  void _exitSelection() {
+    setState(() {
+      _selecting = false;
+      _selected.clear();
+    });
   }
 
   Future<void> _actions(Project project) async {
@@ -135,260 +160,273 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
     final p = context.grace;
     final store = ref.watch(storeProvider);
     final projects = store.trashProjects;
-    return Scaffold(
-      backgroundColor: p.background,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            SizedBox(
-              height: 64,
-              child: Row(
-                children: [
-                  const SizedBox(width: 4),
-                  if (_selecting)
-                    GraceIconAction(
-                      icon: Icons.close,
-                      semanticLabel: l10n.actionClose,
-                      onPressed: () => setState(() {
-                        _selecting = false;
-                        _selected.clear();
-                      }),
-                    )
-                  else
-                    GraceIconAction(
-                      icon: Icons.arrow_back,
-                      semanticLabel: l10n.semanticsBack,
-                      onPressed: () => context.pop(),
-                    ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      _selecting
-                          ? l10n.projectsSelectedCount(_selected.length)
-                          : l10n.trashTitle,
-                      style: GraceType.screenTitle,
-                    ),
-                  ),
-                  if (!_selecting)
-                    TextButton(
-                      onPressed: projects.isEmpty ? null : _purge,
+    // Réconcilie la sélection : un projet restauré ailleurs ne doit pas
+    // rester coché ici (risque de suppression définitive par erreur).
+    _selected.retainWhere((id) => projects.any((e) => e.id == id));
+    if (_selected.isEmpty) _selecting = false;
+    return GraceBackScope(
+      fallback: '/projects',
+      onBack: () {
+        if (_selecting) {
+          _exitSelection();
+          return true;
+        }
+        return false;
+      },
+      child: Scaffold(
+        backgroundColor: p.background,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              SizedBox(
+                height: 64,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 4),
+                    if (_selecting)
+                      GraceIconAction(
+                        icon: Icons.close,
+                        semanticLabel: l10n.actionClose,
+                        onPressed: () => setState(() {
+                          _selecting = false;
+                          _selected.clear();
+                        }),
+                      )
+                    else
+                      GraceIconAction(
+                        icon: Icons.arrow_back,
+                        semanticLabel: l10n.semanticsBack,
+                        onPressed: () => context.pop(),
+                      ),
+                    const SizedBox(width: 4),
+                    Expanded(
                       child: Text(
-                        l10n.trashPurgeAction,
-                        style: GraceType.bodyMedium,
+                        _selecting
+                            ? l10n.projectsSelectedCount(_selected.length)
+                            : l10n.trashTitle,
+                        style: GraceType.screenTitle,
                       ),
                     ),
-                  const SizedBox(width: 12),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.info_outline, size: 20, color: p.secondary),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      l10n.projectsTrashEmptyBody,
-                      style: GraceType.secondary.copyWith(color: p.secondary),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: projects.isEmpty
-                  // Défilement : le texte doit tenir avec une police à 200 %.
-                  ? SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.delete_outline,
-                            size: 40,
-                            color: p.secondary,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            l10n.projectsTrashEmpty,
-                            textAlign: TextAlign.center,
-                            style: GraceType.subtitle,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            l10n.projectsTrashEmptyBody,
-                            textAlign: TextAlign.center,
-                            style: GraceType.secondary.copyWith(
-                              color: p.secondary,
-                            ),
-                          ),
-                        ],
+                    if (!_selecting)
+                      TextButton(
+                        onPressed: projects.isEmpty ? null : _purge,
+                        child: Text(
+                          l10n.trashPurgeAction,
+                          style: GraceType.bodyMedium,
+                        ),
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 12, 24),
-                      itemCount: projects.length,
-                      itemBuilder: (context, index) {
-                        final project = projects[index];
-                        final days = project.trashedAt == null
-                            ? 30
-                            : (30 -
-                                      DateTime.now()
-                                          .difference(project.trashedAt!)
-                                          .inDays)
-                                  .clamp(0, 30);
-                        final urgent = days <= 1;
-                        final selected = _selected.contains(project.id);
-                        return Semantics(
-                          button: true,
-                          selected: selected,
-                          child: InkWell(
-                            onTap: _selecting
-                                ? () => setState(() {
-                                    if (selected) {
-                                      _selected.remove(project.id);
-                                    } else {
-                                      _selected.add(project.id);
-                                    }
-                                  })
-                                : () => _actions(project),
-                            onLongPress: () => setState(() {
-                              _selecting = true;
-                              _selected.add(project.id);
-                            }),
-                            child: Container(
-                              // Hauteur minimale plutôt que fixe : le texte
-                              // doit pouvoir grandir jusqu’à 200 %.
-                              constraints: const BoxConstraints(minHeight: 96),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              color: selected ? p.active : Colors.transparent,
-                              child: Row(
-                                children: [
-                                  if (_selecting)
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 8),
-                                      child: CheckDisc(selected: selected),
-                                    ),
-                                  Opacity(
-                                    opacity: 0.85,
-                                    child: ProjectCover(
-                                      project: project,
-                                      width: 96,
-                                      height: 54,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          project.title,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GraceType.bodyMedium,
-                                        ),
-                                        Text(
-                                          l10n.trashPurgeIn(
-                                            (30 -
-                                                    DateTime.now()
-                                                        .difference(
-                                                          project.trashedAt ??
-                                                              DateTime.now(),
-                                                        )
-                                                        .inDays)
-                                                .clamp(0, 30),
-                                          ),
-                                          style: GraceType.secondary.copyWith(
-                                            color: urgent
-                                                ? p.error
-                                                : p.secondary,
-                                          ),
-                                        ),
-                                        if (urgent)
-                                          Row(
-                                            children: [
-                                              Icon(
-                                                Icons.warning_amber_rounded,
-                                                size: 14,
-                                                color: p.error,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                l10n.trashPurgeTomorrow,
-                                                style: GraceType.secondary
-                                                    .copyWith(color: p.error),
-                                              ),
-                                            ],
-                                          )
-                                        else
-                                          Text(
-                                            l10n.trashDeletedAgo(
-                                              DateTime.now()
-                                                  .difference(
-                                                    project.trashedAt ??
-                                                        DateTime.now(),
-                                                  )
-                                                  .inDays,
-                                            ),
-                                            style: GraceType.caption.copyWith(
-                                              color: p.secondary,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (!_selecting)
-                                    GraceIconAction(
-                                      icon: Icons.more_vert,
-                                      semanticLabel: l10n.projectsMenu(
-                                        project.title,
-                                      ),
-                                      onPressed: () => _actions(project),
-                                      size: 20,
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: _selecting && _selected.isNotEmpty
-          ? Material(
-              color: p.nav,
-              child: SafeArea(
-                top: false,
-                child: SizedBox(
-                  height: GraceDims.navBar,
-                  child: Row(
-                    children: [
-                      _TrashAction(
-                        icon: Icons.restore,
-                        label: l10n.actionRestore,
-                        onTap: () => _restore(_selected.toList()),
-                      ),
-                      _TrashAction(
-                        icon: Icons.delete_forever,
-                        label: l10n.projectsDeleteForever,
-                        onTap: () => _delete(_selected.toList()),
-                      ),
-                    ],
-                  ),
+                    const SizedBox(width: 12),
+                  ],
                 ),
               ),
-            )
-          : null,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline, size: 20, color: p.secondary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        l10n.projectsTrashEmptyBody,
+                        style: GraceType.secondary.copyWith(color: p.secondary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: projects.isEmpty
+                    // Défilement : le texte doit tenir avec une police à 200 %.
+                    ? SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.delete_outline,
+                              size: 40,
+                              color: p.secondary,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              l10n.projectsTrashEmpty,
+                              textAlign: TextAlign.center,
+                              style: GraceType.subtitle,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              l10n.projectsTrashEmptyBody,
+                              textAlign: TextAlign.center,
+                              style: GraceType.secondary.copyWith(
+                                color: p.secondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 12, 24),
+                        itemCount: projects.length,
+                        itemBuilder: (context, index) {
+                          final project = projects[index];
+                          final days = project.trashedAt == null
+                              ? 30
+                              : (30 -
+                                        DateTime.now()
+                                            .difference(project.trashedAt!)
+                                            .inDays)
+                                    .clamp(0, 30);
+                          final urgent = days <= 1;
+                          final selected = _selected.contains(project.id);
+                          return Semantics(
+                            button: true,
+                            selected: selected,
+                            child: InkWell(
+                              onTap: _selecting
+                                  ? () => _toggleSelection(project.id)
+                                  : () => _actions(project),
+                              // L'appui long bascule : il entre en sélection
+                              // comme il en sort quand tout est décoché.
+                              onLongPress: () => _toggleSelection(project.id),
+                              child: Container(
+                                // Hauteur minimale plutôt que fixe : le texte
+                                // doit pouvoir grandir jusqu’à 200 %.
+                                constraints: const BoxConstraints(
+                                  minHeight: 96,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                color: selected ? p.active : Colors.transparent,
+                                child: Row(
+                                  children: [
+                                    if (_selecting)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 8,
+                                        ),
+                                        child: CheckDisc(selected: selected),
+                                      ),
+                                    Opacity(
+                                      opacity: 0.85,
+                                      child: ProjectCover(
+                                        project: project,
+                                        width: 96,
+                                        height: 54,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            project.title,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GraceType.bodyMedium,
+                                          ),
+                                          Text(
+                                            l10n.trashPurgeIn(
+                                              (30 -
+                                                      DateTime.now()
+                                                          .difference(
+                                                            project.trashedAt ??
+                                                                DateTime.now(),
+                                                          )
+                                                          .inDays)
+                                                  .clamp(0, 30),
+                                            ),
+                                            style: GraceType.secondary.copyWith(
+                                              color: urgent
+                                                  ? p.error
+                                                  : p.secondary,
+                                            ),
+                                          ),
+                                          if (urgent)
+                                            Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.warning_amber_rounded,
+                                                  size: 14,
+                                                  color: p.error,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  l10n.trashPurgeTomorrow,
+                                                  style: GraceType.secondary
+                                                      .copyWith(color: p.error),
+                                                ),
+                                              ],
+                                            )
+                                          else
+                                            Text(
+                                              l10n.trashDeletedAgo(
+                                                DateTime.now()
+                                                    .difference(
+                                                      project.trashedAt ??
+                                                          DateTime.now(),
+                                                    )
+                                                    .inDays,
+                                              ),
+                                              style: GraceType.caption.copyWith(
+                                                color: p.secondary,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (!_selecting)
+                                      GraceIconAction(
+                                        icon: Icons.more_vert,
+                                        semanticLabel: l10n.projectsMenu(
+                                          project.title,
+                                        ),
+                                        onPressed: () => _actions(project),
+                                        size: 20,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+        bottomNavigationBar: _selecting && _selected.isNotEmpty
+            ? Material(
+                color: p.nav,
+                child: SafeArea(
+                  top: false,
+                  child: SizedBox(
+                    height: GraceDims.navBar,
+                    child: Row(
+                      children: [
+                        _TrashAction(
+                          icon: Icons.restore,
+                          label: l10n.actionRestore,
+                          onTap: () => _restore(_selected.toList()),
+                        ),
+                        _TrashAction(
+                          icon: Icons.delete_forever,
+                          label: l10n.projectsDeleteForever,
+                          onTap: () => _delete(_selected.toList()),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            : null,
+      ),
     );
   }
 }

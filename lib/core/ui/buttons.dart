@@ -243,12 +243,15 @@ class GraceIconAction extends StatelessWidget {
 }
 
 /// Bouton compact de barre supérieure (par exemple « Exporter »).
+///
+/// La pastille visible mesure [height] (28 dp dans la maquette) mais la zone
+/// tactile reste de 48 dp, centrée verticalement.
 class GracePillAction extends StatelessWidget {
   const GracePillAction({
     super.key,
     required this.label,
     required this.onPressed,
-    this.height = 40,
+    this.height = 28,
   });
 
   final String label;
@@ -264,24 +267,28 @@ class GracePillAction extends StatelessWidget {
       enabled: enabled,
       label: label,
       excludeSemantics: true,
-      child: InkWell(
-        onTap: onPressed,
-        customBorder: const StadiumBorder(),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: GraceDims.touch),
-          child: Container(
-            constraints: BoxConstraints(minWidth: 88, minHeight: height),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: enabled ? p.button : p.surface,
-              borderRadius: BorderRadius.circular(height / 2),
-            ),
-            child: Text(
-              label,
-              style: GraceType.secondaryMedium.copyWith(
-                color: enabled ? p.onButton : p.secondary,
-                fontWeight: FontWeight.w600,
+      child: SizedBox(
+        height: GraceDims.touch,
+        child: InkWell(
+          onTap: onPressed,
+          customBorder: const StadiumBorder(),
+          child: Center(
+            child: Container(
+              height: height,
+              constraints: const BoxConstraints(minWidth: 88),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: enabled ? p.button : p.surface,
+                borderRadius: BorderRadius.circular(height / 2),
+              ),
+              child: Text(
+                label,
+                maxLines: 1,
+                style: GraceType.secondaryMedium.copyWith(
+                  color: enabled ? p.onButton : p.secondary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),

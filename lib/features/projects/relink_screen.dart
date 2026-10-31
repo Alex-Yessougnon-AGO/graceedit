@@ -267,7 +267,7 @@ class _RelinkScreenState extends ConsumerState<RelinkScreen> {
                   GracePrimaryButton(
                     label: l10n.missingOpen,
                     onPressed: missing.isEmpty
-                        ? () => context.go('/editor/${project.id}')
+                        ? () => context.pushReplacement('/editor/${project.id}')
                         : null,
                   ),
                   if (missing.isNotEmpty)
@@ -279,7 +279,7 @@ class _RelinkScreenState extends ConsumerState<RelinkScreen> {
                           if (missing.length == project.media.length) {
                             _removeAll();
                           } else {
-                            context.go('/editor/${project.id}');
+                            context.pushReplacement('/editor/${project.id}');
                           }
                         },
                       ),

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/generated/app_localizations.dart';
 import '../models/project.dart';
+import '../services/media_service.dart';
 import '../state/providers.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
@@ -23,6 +24,9 @@ class GraceThumb extends ConsumerWidget {
     this.showDuration = true,
     this.timeMs = 0,
     this.fit = BoxFit.cover,
+    this.zoom = 1,
+    this.offsetX = 0,
+    this.offsetY = 0,
   });
 
   final MediaRef? media;
@@ -35,6 +39,11 @@ class GraceThumb extends ConsumerWidget {
   final bool showDuration;
   final int timeMs;
   final BoxFit fit;
+
+  /// Recadrage de la couverture : zoom et décalage normalisé.
+  final double zoom;
+  final double offsetX;
+  final double offsetY;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -67,24 +76,31 @@ class GraceThumb extends ConsumerWidget {
         File(m.uri).existsSync()) {
       return _frame(context, _file(m.uri));
     }
-    final service = ref.watch(thumbnailServiceProvider);
+    // La future est mémorisée dans l'état : la relancer à chaque
+    // reconstruction (20 fois par seconde pendant la lecture) vidait l'écran
+    // de ses vignettes.
     return _frame(
       context,
-      FutureBuilder<String?>(
-        future: service.frame(m, timeMs, width: (width * 2).round()),
-        builder: (context, snapshot) {
-          final file = snapshot.data;
-          if (file != null && File(file).existsSync()) {
-            return _file(file);
-          }
-          return _placeholder(context);
-        },
+      _ThumbImage(
+        service: ref.read(thumbnailServiceProvider),
+        media: m,
+        timeMs: timeMs,
+        width: (width * 2).round(),
       ),
     );
   }
 
   Widget _frame(BuildContext context, Widget content) {
     final p = context.grace;
+    final cropped = zoom != 1 || offsetX != 0 || offsetY != 0
+        ? Transform(
+            alignment: Alignment.center,
+            transform: Matrix4.identity()
+              ..translateByDouble(offsetX * width, offsetY * height, 0, 1)
+              ..scaleByDouble(zoom, zoom, 1, 1),
+            child: content,
+          )
+        : content;
     return SizedBox(
       width: width,
       height: height,
@@ -93,7 +109,7 @@ class GraceThumb extends ConsumerWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            content,
+            cropped,
             if (missing) ...[
               Positioned(
                 left: 4,
@@ -169,6 +185,72 @@ class GraceThumb extends ConsumerWidget {
   }
 }
 
+class _ThumbImage extends StatefulWidget {
+  const _ThumbImage({
+    required this.service,
+    required this.media,
+    required this.timeMs,
+    required this.width,
+  });
+
+  final ThumbnailService service;
+  final MediaRef media;
+  final int timeMs;
+  final int width;
+
+  @override
+  State<_ThumbImage> createState() => _ThumbImageState();
+}
+
+class _ThumbImageState extends State<_ThumbImage> {
+  Future<String?>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_ThumbImage old) {
+    super.didUpdateWidget(old);
+    if (old.media.id != widget.media.id ||
+        old.media.uri != widget.media.uri ||
+        old.timeMs != widget.timeMs ||
+        old.width != widget.width) {
+      _load();
+    }
+  }
+
+  void _load() {
+    _future = widget.service.frame(
+      widget.media,
+      widget.timeMs,
+      width: widget.width,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String?>(
+      future: _future,
+      builder: (context, snapshot) {
+        final file = snapshot.data;
+        if (file != null && File(file).existsSync()) {
+          return Image.file(
+            File(file),
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            errorBuilder: (context, _, _) =>
+                ColoredBox(color: context.grace.surface),
+          );
+        }
+        return const SizedBox.shrink();
+      },
+    );
+  }
+}
+
 /// Vignette de couverture : image de galerie ou première image de la vidéo.
 class ProjectCover extends ConsumerWidget {
   const ProjectCover({
@@ -201,6 +283,13 @@ class ProjectCover extends ConsumerWidget {
       durationMs: project.durationMs,
       showDuration: showDuration,
       timeMs: project.coverTimeMs,
+      zoom: project.coverSource == CoverSource.gallery ? project.coverZoom : 1,
+      offsetX: project.coverSource == CoverSource.gallery
+          ? project.coverOffsetX
+          : 0,
+      offsetY: project.coverSource == CoverSource.gallery
+          ? project.coverOffsetY
+          : 0,
     );
   }
 }

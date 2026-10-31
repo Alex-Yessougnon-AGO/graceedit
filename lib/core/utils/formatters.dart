@@ -21,15 +21,13 @@ String formatDurationSpoken(int milliseconds, AppLocalizations l10n) {
   final total = (milliseconds / 1000).round().clamp(0, 359999);
   final m = total ~/ 60;
   final s = total % 60;
-  if (l10n.localeName.startsWith('en')) {
-    final parts = <String>[];
-    if (m > 0) parts.add('$m ${m == 1 ? 'minute' : 'minutes'}');
-    if (s > 0 || m == 0) parts.add('$s ${s == 1 ? 'second' : 'seconds'}');
-    return parts.join(' ');
-  }
   final parts = <String>[];
-  if (m > 0) parts.add('$m ${m == 1 ? 'minute' : 'minutes'}');
-  if (s > 0 || m == 0) parts.add('$s ${s == 1 ? 'seconde' : 'secondes'}');
+  if (m > 0) {
+    parts.add('$m ${m == 1 ? l10n.unitMinuteOne : l10n.unitMinuteOther}');
+  }
+  if (s > 0 || m == 0) {
+    parts.add('$s ${s == 1 ? l10n.unitSecondOne : l10n.unitSecondOther}');
+  }
   return parts.join(' ');
 }
 
@@ -85,41 +83,26 @@ String _decimal(double value) {
   return value.toStringAsFixed(1).replaceAll('.', ',');
 }
 
-const _monthsFr = [
-  'janv.',
-  'févr.',
-  'mars',
-  'avr.',
-  'mai',
-  'juin',
-  'juil.',
-  'août',
-  'sept.',
-  'oct.',
-  'nov.',
-  'déc.',
-];
-
-const _monthsEn = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
+/// Mois abrégé traduit (1 = janvier). Les libellés vivent dans les ARB.
+String monthShort(int month, AppLocalizations l10n) => switch (month) {
+  1 => l10n.monthJan,
+  2 => l10n.monthFeb,
+  3 => l10n.monthMar,
+  4 => l10n.monthApr,
+  5 => l10n.monthMay,
+  6 => l10n.monthJun,
+  7 => l10n.monthJul,
+  8 => l10n.monthAug,
+  9 => l10n.monthSep,
+  10 => l10n.monthOct,
+  11 => l10n.monthNov,
+  _ => l10n.monthDec,
+};
 
 /// Date de projet : « il y a 2 h », « Hier », « 12 oct. ».
 String formatModified(DateTime date, AppLocalizations l10n, {DateTime? now}) {
   final current = now ?? DateTime.now();
   final diff = current.difference(date);
-  final fr = l10n.localeName.startsWith('fr');
   if (diff.inMinutes < 1) return l10n.modifiedJustNow;
   if (diff.inHours < 1) return l10n.modifiedMinutesAgo(diff.inMinutes);
   if (diff.inHours < 24 &&
@@ -133,20 +116,17 @@ String formatModified(DateTime date, AppLocalizations l10n, {DateTime? now}) {
       date.day == yesterday.day) {
     return l10n.dateYesterday;
   }
-  final months = fr ? _monthsFr : _monthsEn;
-  return '${date.day} ${months[date.month - 1]}';
+  return '${date.day} ${monthShort(date.month, l10n)}';
 }
 
 /// Titre par défaut : « Projet du 19 oct. ».
 String defaultProjectTitle(DateTime date, AppLocalizations l10n) {
-  final months = l10n.localeName.startsWith('fr') ? _monthsFr : _monthsEn;
-  return l10n.importDefaultName('${date.day} ${months[date.month - 1]}');
+  return l10n.importDefaultName('${date.day} ${monthShort(date.month, l10n)}');
 }
 
 /// Date et heure de prise de vue : « 18 oct., 14:32 ».
 String formatCaptureDate(DateTime date, AppLocalizations l10n) {
-  final months = l10n.localeName.startsWith('fr') ? _monthsFr : _monthsEn;
-  return '${date.day} ${months[date.month - 1]}, '
+  return '${date.day} ${monthShort(date.month, l10n)}, '
       '${date.hour.toString().padLeft(2, '0')}:'
       '${date.minute.toString().padLeft(2, '0')}';
 }

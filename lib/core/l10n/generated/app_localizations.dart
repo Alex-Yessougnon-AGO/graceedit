@@ -278,6 +278,12 @@ abstract class AppLocalizations {
   /// **'Non enregistré'**
   String get saveStateFailed;
 
+  /// No description provided for @projectSaved.
+  ///
+  /// In fr, this message translates to:
+  /// **'Projet enregistré'**
+  String get projectSaved;
+
   /// No description provided for @toastClipDeleted.
   ///
   /// In fr, this message translates to:
@@ -1601,7 +1607,7 @@ abstract class AppLocalizations {
   /// No description provided for @projectsSelectedCount.
   ///
   /// In fr, this message translates to:
-  /// **'{count, plural, =1{1 sélectionné} other{{count} sélectionnés}}'**
+  /// **'{count, plural, =0{0 sélectionné} =1{1 sélectionné} other{{count} sélectionnés}}'**
   String projectsSelectedCount(int count);
 
   /// No description provided for @projectsEmptyTitle.
@@ -1637,8 +1643,8 @@ abstract class AppLocalizations {
   /// No description provided for @projectsDeleteBody.
   ///
   /// In fr, this message translates to:
-  /// **'Ils resteront 30 jours dans la corbeille, puis seront supprimés.'**
-  String get projectsDeleteBody;
+  /// **'{count, plural, =1{Il restera 30 jours dans la corbeille, puis sera supprimé.} other{Ils resteront 30 jours dans la corbeille, puis seront supprimés.}}'**
+  String projectsDeleteBody(int count);
 
   /// No description provided for @projectsToTrash.
   ///
@@ -2360,6 +2366,36 @@ abstract class AppLocalizations {
   /// **'Tête de lecture'**
   String get semanticsPlayhead;
 
+  /// No description provided for @timelineClipLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Clip {index}, durée {duration}'**
+  String timelineClipLabel(int index, String duration);
+
+  /// No description provided for @timelineTextLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Texte : {text}'**
+  String timelineTextLabel(String text);
+
+  /// No description provided for @timelineAudioLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Musique : {name}'**
+  String timelineAudioLabel(String name);
+
+  /// No description provided for @trimHandleStartLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Poignée de début, faire glisser pour rogner'**
+  String get trimHandleStartLabel;
+
+  /// No description provided for @trimHandleEndLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Poignée de fin, faire glisser pour rogner'**
+  String get trimHandleEndLabel;
+
   /// No description provided for @semanticsPosition.
   ///
   /// In fr, this message translates to:
@@ -2450,6 +2486,102 @@ abstract class AppLocalizations {
   /// **'Hier'**
   String get dateYesterday;
 
+  /// No description provided for @unitMinuteOne.
+  ///
+  /// In fr, this message translates to:
+  /// **'minute'**
+  String get unitMinuteOne;
+
+  /// No description provided for @unitMinuteOther.
+  ///
+  /// In fr, this message translates to:
+  /// **'minutes'**
+  String get unitMinuteOther;
+
+  /// No description provided for @unitSecondOne.
+  ///
+  /// In fr, this message translates to:
+  /// **'seconde'**
+  String get unitSecondOne;
+
+  /// No description provided for @unitSecondOther.
+  ///
+  /// In fr, this message translates to:
+  /// **'secondes'**
+  String get unitSecondOther;
+
+  /// No description provided for @monthJan.
+  ///
+  /// In fr, this message translates to:
+  /// **'janv.'**
+  String get monthJan;
+
+  /// No description provided for @monthFeb.
+  ///
+  /// In fr, this message translates to:
+  /// **'févr.'**
+  String get monthFeb;
+
+  /// No description provided for @monthMar.
+  ///
+  /// In fr, this message translates to:
+  /// **'mars'**
+  String get monthMar;
+
+  /// No description provided for @monthApr.
+  ///
+  /// In fr, this message translates to:
+  /// **'avr.'**
+  String get monthApr;
+
+  /// No description provided for @monthMay.
+  ///
+  /// In fr, this message translates to:
+  /// **'mai'**
+  String get monthMay;
+
+  /// No description provided for @monthJun.
+  ///
+  /// In fr, this message translates to:
+  /// **'juin'**
+  String get monthJun;
+
+  /// No description provided for @monthJul.
+  ///
+  /// In fr, this message translates to:
+  /// **'juil.'**
+  String get monthJul;
+
+  /// No description provided for @monthAug.
+  ///
+  /// In fr, this message translates to:
+  /// **'août'**
+  String get monthAug;
+
+  /// No description provided for @monthSep.
+  ///
+  /// In fr, this message translates to:
+  /// **'sept.'**
+  String get monthSep;
+
+  /// No description provided for @monthOct.
+  ///
+  /// In fr, this message translates to:
+  /// **'oct.'**
+  String get monthOct;
+
+  /// No description provided for @monthNov.
+  ///
+  /// In fr, this message translates to:
+  /// **'nov.'**
+  String get monthNov;
+
+  /// No description provided for @monthDec.
+  ///
+  /// In fr, this message translates to:
+  /// **'déc.'**
+  String get monthDec;
+
   /// No description provided for @projectLineLabel.
   ///
   /// In fr, this message translates to:
@@ -2489,8 +2621,8 @@ abstract class AppLocalizations {
   /// No description provided for @importVideos.
   ///
   /// In fr, this message translates to:
-  /// **'{count} vidéos'**
-  String importVideos(Object count);
+  /// **'{count, plural, =0{0 vidéo} =1{1 vidéo} other{{count} vidéos}}'**
+  String importVideos(num count);
 
   /// No description provided for @welcomeGuarantees.
   ///
@@ -2545,6 +2677,12 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Placez la tête de lecture à l’intérieur du clip'**
   String get editorSplitHint;
+
+  /// No description provided for @editorSelectClipFirst.
+  ///
+  /// In fr, this message translates to:
+  /// **'Sélectionnez d’abord un clip de la timeline.'**
+  String get editorSelectClipFirst;
 
   /// No description provided for @editorPreciseTrim.
   ///
@@ -2792,6 +2930,24 @@ abstract class AppLocalizations {
   /// **'Faites glisser pour déplacer, les poignées pour rogner.'**
   String get audioWaveformHint;
 
+  /// No description provided for @audioPreparing.
+  ///
+  /// In fr, this message translates to:
+  /// **'Préparation de l’audio…'**
+  String get audioPreparing;
+
+  /// No description provided for @audioUnreadable.
+  ///
+  /// In fr, this message translates to:
+  /// **'Audio illisible'**
+  String get audioUnreadable;
+
+  /// No description provided for @audioFadePreview.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aperçu des fondus'**
+  String get audioFadePreview;
+
   /// No description provided for @adjustApplied.
   ///
   /// In fr, this message translates to:
@@ -2864,6 +3020,72 @@ abstract class AppLocalizations {
   /// **'Image de la vidéo'**
   String get coverFromVideoLabel;
 
+  /// No description provided for @coverPreviewSemantics.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aperçu de la couverture à {time}'**
+  String coverPreviewSemantics(String time);
+
+  /// No description provided for @coverFrameSemantics.
+  ///
+  /// In fr, this message translates to:
+  /// **'Image à {time}'**
+  String coverFrameSemantics(String time);
+
+  /// No description provided for @coverForward.
+  ///
+  /// In fr, this message translates to:
+  /// **'Avancer d’une seconde'**
+  String get coverForward;
+
+  /// No description provided for @coverBackward.
+  ///
+  /// In fr, this message translates to:
+  /// **'Reculer d’une seconde'**
+  String get coverBackward;
+
+  /// No description provided for @coverNextImage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Image suivante'**
+  String get coverNextImage;
+
+  /// No description provided for @coverPrevImage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Image précédente'**
+  String get coverPrevImage;
+
+  /// No description provided for @coverExtractFailed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Impossible de lire cette image'**
+  String get coverExtractFailed;
+
+  /// No description provided for @coverCropHintShort.
+  ///
+  /// In fr, this message translates to:
+  /// **'Glissez pour recadrer'**
+  String get coverCropHintShort;
+
+  /// No description provided for @coverResetAutomatic.
+  ///
+  /// In fr, this message translates to:
+  /// **'Revenir au choix automatique'**
+  String get coverResetAutomatic;
+
+  /// No description provided for @coverPickFailed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Impossible d’ouvrir le sélecteur d’images.'**
+  String get coverPickFailed;
+
+  /// No description provided for @coverCopyFailed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Impossible de copier cette image.'**
+  String get coverCopyFailed;
+
   /// No description provided for @exportEstimatedSize.
   ///
   /// In fr, this message translates to:
@@ -2875,6 +3097,12 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Étape {current} sur {total}'**
   String exportStep(Object current, Object total);
+
+  /// No description provided for @exportProgressLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Progression de l\'export'**
+  String get exportProgressLabel;
 
   /// No description provided for @exportInProgress.
   ///

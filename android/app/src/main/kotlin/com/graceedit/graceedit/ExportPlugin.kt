@@ -12,10 +12,12 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import androidx.media3.common.C
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.OverlaySettings
 import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.GainProcessor
 import androidx.media3.effect.BitmapOverlay
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.Presentation
@@ -45,9 +47,11 @@ import java.util.concurrent.ConcurrentHashMap
  * - exportProgress{jobId} -> {state: queued|running|done|error|cancelled, progress: 0..1, error?}
  * - cancelExport{jobId} -> bool
  *
- * V1 scope: trim + concat + rotation + resize + baked text overlays.
- * Speed/volume/filters are preview-side in V1 and get baked in the Pro
- * export phase.
+ * V1 scope: trim + concat + rotation + resize + baked text overlays +
+ * volume/fades and background-music mixing.
+ *
+ * The editor preview and the exported file must agree: the same clip volume,
+ * video volume, music, fades and text placement are applied here.
  */
 class ExportPlugin(private val context: Context, engine: FlutterEngine) {
 
@@ -80,13 +84,16 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
                                 ?: emptyList()
                             val subtitleStyle =
                                 call.argument<String>("subtitleStyle") ?: "classic"
+                            val audios = call.argument<List<Map<String, Any>>>("audios")
+                                ?: emptyList()
+                            val fit = call.argument<String>("fit") ?: "fill"
                             val outPath = call.argument<String>("outPath")
                                 ?: return@setMethodCallHandler result.error(
                                     "BAD_ARGS", "outPath required", null)
                             val jobId = UUID.randomUUID().toString()
                             start(
                                 jobId, clips, texts, subtitles, subtitleStyle,
-                                width, height, outPath)
+                                width, height, outPath, audios, fit)
                             result.success(jobId)
                         } catch (e: Exception) {
                             result.error("START_FAILED", e.message, null)
@@ -156,6 +163,8 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
         width: Int,
         height: Int,
         outPath: String,
+        audios: List<Map<String, Any>> = emptyList(),
+        fit: String = "fill",
     ) {
         val cues = subtitles.mapNotNull { raw ->
             val text = (raw["text"] as? String)?.trim().orEmpty()
@@ -163,11 +172,25 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
                 startMs = (raw["startMs"] as? Number)?.toLong() ?: 0L,
                 endMs = (raw["endMs"] as? Number)?.toLong() ?: 0L,
                 text = text,
+                x = (raw["x"] as? Number)?.toDouble()?.toFloat() ?: 0.5f,
+                y = (raw["y"] as? Number)?.toDouble()?.toFloat() ?: 0.5f,
+                size = (raw["size"] as? Number)?.toDouble()?.toFloat() ?: 0f,
+                color = (raw["color"] as? Number)?.toLong() ?: 0xFFF6F2EAL,
+                opacity = (raw["opacity"] as? Number)?.toDouble()?.toFloat() ?: 1f,
+                align = (raw["align"] as? String) ?: "center",
+                background = raw["background"] == true,
             )
         }
         // Texts sit just above the subtitle band when both are present, so
         // they never overlap on screen.
         val textEffect = buildTextEffect(texts, width, cues.isNotEmpty())
+        val layout = if (fit == "fit") {
+            Presentation.LAYOUT_SCALE_TO_FIT
+        } else {
+            Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
+        }
+        val videoVolume = (clips.firstOrNull()?.get("videoVolume") as? Number)
+            ?.toFloat() ?: 1f
         val items = mutableListOf<EditedMediaItem>()
         var clipOffsetMs = 0L
         for (c in clips) {
@@ -175,6 +198,8 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
             val startMs = (c["startMs"] as Number).toLong()
             val endMs = (c["endMs"] as Number).toLong()
             val rotation = (c["rotation"] as? Number)?.toInt() ?: 0
+            val clipVolume = ((c["volume"] as? Number)?.toFloat() ?: 1f)
+                .coerceIn(0f, 1f)
             val clipDurationMs = (endMs - startMs).coerceAtLeast(1L)
             val mediaItem = MediaItem.Builder()
                 .setUri(path)
@@ -192,8 +217,7 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
                         .build())
             }
             videoEffects.add(
-                Presentation.createForWidthAndHeight(
-                    width, height, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP))
+                Presentation.createForWidthAndHeight(width, height, layout))
             if (textEffect != null) {
                 // After the resize, so the text is never cropped with the frame.
                 videoEffects.add(textEffect)
@@ -205,21 +229,72 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
                 val localEnd = minOf(cue.endMs, clipOffsetMs + clipDurationMs) -
                     clipOffsetMs
                 if (localEnd <= localStart) null
-                else SubtitleCue(localStart, localEnd, cue.text)
+                else cue.copy(startMs = localStart, endMs = localEnd)
             }
             if (localCues.isNotEmpty()) {
                 videoEffects.add(
                     OverlayEffect(listOf(
                         SubtitleOverlay(localCues, subtitleStyle, width, height))))
             }
+            val audioProcessors = mutableListOf<AudioProcessor>()
+            val gain = clipVolume * videoVolume
+            if (gain < 0.999f) {
+                audioProcessors.add(
+                    GainProcessor(RampGain(gain, 0L, 0L, clipDurationMs * 1000L)))
+            }
             items.add(
                 EditedMediaItem.Builder(mediaItem)
-                    .setEffects(Effects(emptyList<AudioProcessor>(), videoEffects))
+                    .setEffects(Effects(audioProcessors, videoEffects))
                     .build())
             clipOffsetMs += clipDurationMs
         }
         val sequence = EditedMediaItemSequence.Builder(items).build()
-        val composition = Composition.Builder(listOf(sequence)).build()
+        val sequences = mutableListOf(sequence)
+        val projectDurationMs = clipOffsetMs
+        // Une séquence audio par élément ajouté : Media3 mélange le son de
+        // toutes les séquences (musique + son d'origine).
+        for (a in audios) {
+            val path = a["path"] as? String ?: continue
+            val startMs = ((a["startMs"] as? Number)?.toLong() ?: 0L)
+                .coerceIn(0L, projectDurationMs)
+            val trimStartMs = (a["trimStartMs"] as? Number)?.toLong() ?: 0L
+            var trimEndMs = (a["trimEndMs"] as? Number)?.toLong() ?: 0L
+            // Le son ne joue jamais au-delà de la fin du projet.
+            trimEndMs = minOf(trimEndMs, trimStartMs + (projectDurationMs - startMs))
+            if (trimEndMs - trimStartMs < 100L) continue
+            val volume = ((a["volume"] as? Number)?.toFloat() ?: 1f)
+                .coerceIn(0f, 1f)
+            val fadeInMs = (a["fadeInMs"] as? Number)?.toLong() ?: 0L
+            val fadeOutMs = (a["fadeOutMs"] as? Number)?.toLong() ?: 0L
+            val musicItem = MediaItem.Builder()
+                .setUri(path)
+                .setClippingConfiguration(
+                    MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(trimStartMs)
+                        .setEndPositionMs(trimEndMs)
+                        .build())
+                .build()
+            val durationUs = (trimEndMs - trimStartMs) * 1000L
+            val gainProcessor = GainProcessor(
+                RampGain(
+                    volume,
+                    fadeInMs * 1000L,
+                    fadeOutMs * 1000L,
+                    durationUs))
+            val musicEdited = EditedMediaItem.Builder(musicItem)
+                .setRemoveVideo(true)
+                .setEffects(Effects(listOf(gainProcessor), emptyList()))
+                .build()
+            val builder = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
+            if (startMs > 0) builder.addGap(startMs * 1000L)
+            builder.addItem(musicEdited)
+            sequences.add(builder.build())
+        }
+        val composition = if (sequences.size == 1) {
+            Composition.Builder(listOf(sequence)).build()
+        } else {
+            Composition.Builder(sequences).build()
+        }
 
         lateinit var job: Job
         val transformer = Transformer.Builder(context)
@@ -359,12 +434,60 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
     }
 }
 
-/** One subtitle cue on the exported timeline (milliseconds). */
+/** One text cue on the exported timeline (milliseconds). */
 private data class SubtitleCue(
     val startMs: Long,
     val endMs: Long,
     val text: String,
+    val x: Float = 0.5f,
+    val y: Float = 0.5f,
+    val size: Float = 0f,
+    val color: Long = 0xFFF6F2EA,
+    val opacity: Float = 1f,
+    val align: String = "center",
+    val background: Boolean = false,
 )
+
+/**
+ * Gain constant, avec rampes linéaires d'entrée et de sortie. Le même calcul
+ * que `PreviewAudioEngine.gainFor` côté Dart, pour que l'export sonne comme
+ * l'aperçu.
+ */
+private class RampGain(
+    private val gain: Float,
+    private val fadeInUs: Long,
+    private val fadeOutUs: Long,
+    private val durationUs: Long,
+) : GainProcessor.GainProvider {
+
+    override fun getGainFactorAtSamplePosition(
+        samplePosition: Long,
+        sampleRate: Int,
+    ): Float {
+        if (fadeInUs <= 0 && fadeOutUs <= 0) return gain.coerceIn(0f, 1f)
+        val positionUs = if (sampleRate > 0) {
+            samplePosition * 1_000_000L / sampleRate
+        } else {
+            0L
+        }
+        var value = gain
+        if (fadeInUs > 0 && positionUs < fadeInUs) {
+            value *= (positionUs.toDouble() / fadeInUs).toFloat()
+        }
+        if (fadeOutUs > 0 && durationUs > 0) {
+            val remaining = durationUs - positionUs
+            if (remaining < fadeOutUs) {
+                value *= (remaining.toDouble() / fadeOutUs)
+                    .toFloat()
+                    .coerceIn(0f, 1f)
+            }
+        }
+        return value.coerceIn(0f, 1f)
+    }
+
+    override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long =
+        if (fadeInUs <= 0L && fadeOutUs <= 0L) Long.MAX_VALUE else samplePosition
+}
 
 /**
  * Time-aware subtitle overlay. Returns an empty bitmap outside every cue, and
@@ -378,39 +501,68 @@ private class SubtitleOverlay(
     private val frameHeight: Int,
 ) : BitmapOverlay() {
     private val empty: Bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
-    private val cache = LinkedHashMap<String, Bitmap>()
-    private val settings: OverlaySettings = StaticOverlaySettings.Builder()
-        .setOverlayFrameAnchor(0f, -1f)
-        .setBackgroundFrameAnchor(0f, -0.93f)
-        .build()
+    private val cache = HashMap<Int, Bitmap>()
+    private val settings = HashMap<Int, OverlaySettings>()
 
     override fun getBitmap(presentationTimeUs: Long): Bitmap {
         val ms = presentationTimeUs / 1000
-        val cue = cues.firstOrNull { ms >= it.startMs && ms < it.endMs }
-            ?: return empty
-        cache[cue.text]?.let { return it }
-        // Keep memory bounded: a project rarely shows more than a few lines.
-        if (cache.size >= 4) cache.remove(cache.keys.first())
-        val bitmap = render(cue.text)
-        cache[cue.text] = bitmap
+        val index = cues.indexOfFirst { ms >= it.startMs && ms < it.endMs }
+        if (index < 0) return empty
+        cache[index]?.let { return it }
+        val bitmap = render(cues[index])
+        cache[index] = bitmap
         return bitmap
     }
 
-    override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings =
-        settings
+    /// Le texte est ancré exactement là où l'aperçu le montre (x, y normalisés),
+    /// pas au bas du cadre comme un sous-titre.
+    override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
+        val ms = presentationTimeUs / 1000
+        val index = cues.indexOfFirst { ms >= it.startMs && ms < it.endMs }
+        if (index < 0) return defaultSettings
+        return settings.getOrPut(index) {
+            val cue = cues[index]
+            StaticOverlaySettings.Builder()
+                .setOverlayFrameAnchor(0f, 0f)
+                .setBackgroundFrameAnchor(
+                    (cue.x * 2f - 1f).coerceIn(-1f, 1f),
+                    (1f - cue.y * 2f).coerceIn(-1f, 1f))
+                .build()
+        }
+    }
 
-    private fun render(text: String): Bitmap {
-        val maxWidth = frameWidth * 0.92f
-        val baseSize = frameWidth * 0.045f
+    private val defaultSettings: OverlaySettings =
+        StaticOverlaySettings.Builder()
+            .setOverlayFrameAnchor(0f, 0f)
+            .setBackgroundFrameAnchor(0f, 0f)
+            .build()
+
+    private fun render(cue: SubtitleCue): Bitmap {
+        val text = cue.text
+        val maxWidth = frameWidth * 0.9f
+        // La taille est en dp dans un aperçu large de 360 dp (EDT-03).
+        val baseSize = if (cue.size > 0f) {
+            frameWidth * cue.size / 360f
+        } else {
+            frameWidth * 0.045f
+        }
         val typeface = Typeface.create(
             Typeface.DEFAULT,
             if (style == "classic") Typeface.NORMAL else Typeface.BOLD)
+        val alpha = (cue.opacity.coerceIn(0f, 1f) * 255).toInt()
+        val textColor = ((cue.color.toInt() and 0x00FFFFFF) or (alpha shl 24))
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
+            color = textColor
             textSize = baseSize
             this.typeface = typeface
-            textAlign = Paint.Align.CENTER
-            setShadowLayer(baseSize * 0.14f, 0f, baseSize * 0.07f, Color.BLACK)
+            textAlign = when (cue.align) {
+                "left" -> Paint.Align.LEFT
+                "right" -> Paint.Align.RIGHT
+                else -> Paint.Align.CENTER
+            }
+            if (!cue.background) {
+                setShadowLayer(baseSize * 0.14f, 0f, baseSize * 0.07f, Color.BLACK)
+            }
         }
         // Wrap like the preview; only shrink when a single word is too wide.
         val lines = mutableListOf<String>()
@@ -431,30 +583,36 @@ private class SubtitleOverlay(
             measured = lines.maxOf { fill.measureText(it) }
         }
         val metrics = fill.fontMetrics
-        val lineHeight = (metrics.descent - metrics.ascent) * 1.12f
-        val pad = fill.textSize * 0.35f
-        val w = (measured + pad * 2).toInt().coerceIn(1, frameWidth)
+        val lineHeight = (metrics.descent - metrics.ascent) * 1.15f
+        val pad = if (cue.background) fill.textSize * 0.4f else 0f
+        val w = (measured + pad * 2).toInt().coerceAtLeast(1)
         val h = (lineHeight * lines.size + pad * 2)
             .toInt().coerceAtLeast(1)
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        // A dark pill keeps white text readable on bright footage.
-        val pill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(140, 0, 0, 0)
+        if (cue.background) {
+            val pill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.argb(140, 0, 0, 0)
+            }
+            canvas.drawRoundRect(
+                0f, 0f, w.toFloat(), h.toFloat(),
+                h * 0.22f, h * 0.22f, pill)
         }
-        canvas.drawRoundRect(
-            0f, 0f, w.toFloat(), h.toFloat(),
-            h * 0.22f, h * 0.22f, pill)
         val stroke = if (style == "outline") Paint(fill).apply {
             this.style = Paint.Style.STROKE
             strokeWidth = fill.textSize * 0.09f
             strokeCap = Paint.Cap.ROUND
             color = Color.BLACK
         } else null
+        val x = when (cue.align) {
+            "left" -> pad
+            "right" -> w - pad
+            else -> w / 2f
+        }
         lines.forEachIndexed { i, line ->
             val baseline = pad + (i + 1) * lineHeight - metrics.descent
-            stroke?.let { canvas.drawText(line, w / 2f, baseline, it) }
-            canvas.drawText(line, w / 2f, baseline, fill)
+            stroke?.let { canvas.drawText(line, x, baseline, it) }
+            canvas.drawText(line, x, baseline, fill)
         }
         return bitmap
     }

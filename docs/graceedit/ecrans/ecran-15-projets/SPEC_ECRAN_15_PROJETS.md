@@ -75,7 +75,7 @@ Par défaut la fenêtre de choix s'affiche à chaque fois. Un réglage « Suppre
 - **Actions d'une ligne** (« ⋮ », ou toucher la ligne) : **Restaurer** (retour dans Projets, message « Projet restauré ») et **Supprimer définitivement** (confirmation comme ci-dessus). Un projet de la corbeille ne peut pas être ouvert ni modifié.
 - **Vider** : fenêtre « Vider la corbeille ? » ; « N projets seront supprimés pour toujours. » ; « Annuler » plein, « Vider » en couleur d'erreur.
 - **Sélection multiple** dans la corbeille : mêmes règles, avec « Restaurer » et « Supprimer définitivement ».
-- **Corbeille vide** (non dessiné) : « La corbeille est vide. Les projets supprimés apparaissent ici pendant 30 jours. »
+- **Corbeille vide** (`prj01-corbeille-vide-*`) : icône, « La corbeille est vide. », « Les projets supprimés apparaissent ici pendant 30 jours. » ; le bouton « Vider » n'est pas affiché.
 - **Purge automatique** : les projets de plus de 30 jours sont supprimés à l'ouverture de l'application et par une tâche en arrière-plan.
 - **Stockage** : un projet ne contient que les réglages de montage ; les médias ne sont pas copiés. À la mise à la corbeille, les **miniatures et caches** du projet peuvent être supprimés pour libérer de l'espace ; ils sont régénérés à la restauration.
 

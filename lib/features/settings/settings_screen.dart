@@ -6,6 +6,7 @@ import '../../core/l10n/generated/app_localizations.dart';
 import '../../core/models/settings.dart';
 import '../../core/state/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/ui/back_scope.dart';
 import '../../core/ui/nav_bar.dart';
 import '../../core/ui/sheets.dart';
 import '../../core/utils/formatters.dart';
@@ -19,168 +20,170 @@ class SettingsScreen extends ConsumerWidget {
     final settings = store.settings;
     final l10n = AppLocalizations.of(context);
     final p = context.grace;
-    return Scaffold(
-      backgroundColor: p.background,
-      body: SafeArea(
-        bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: 24),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-              child: Semantics(
-                header: true,
-                child: Text(l10n.settingsTitle, style: GraceType.screenTitle),
+    return GraceBackScope(
+      child: Scaffold(
+        backgroundColor: p.background,
+        body: SafeArea(
+          bottom: false,
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: 24),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                child: Semantics(
+                  header: true,
+                  child: Text(l10n.settingsTitle, style: GraceType.screenTitle),
+                ),
               ),
-            ),
-            _Section(l10n.settingsAppearance),
-            _SettingsRow(
-              label: l10n.settingsTheme,
-              value: switch (settings.theme) {
-                AppThemeMode.system => l10n.settingsThemeSystem,
-                AppThemeMode.light => l10n.settingsThemeLight,
-                AppThemeMode.dark => l10n.settingsThemeDark,
-              },
-              onTap: () async {
-                final value = await showGraceChoiceSheet<AppThemeMode>(
-                  context: context,
-                  title: l10n.settingsThemeSheetTitle,
-                  current: settings.theme,
-                  options: [
-                    GraceChoiceOption(
-                      value: AppThemeMode.system,
-                      label: l10n.settingsThemeSystem,
-                    ),
-                    GraceChoiceOption(
-                      value: AppThemeMode.light,
-                      label: l10n.settingsThemeLight,
-                    ),
-                    GraceChoiceOption(
-                      value: AppThemeMode.dark,
-                      label: l10n.settingsThemeDark,
-                    ),
-                  ],
-                );
-                if (value != null) {
-                  await store.setSettings(settings.copyWith(theme: value));
-                }
-              },
-            ),
-            _SettingsRow(
-              label: l10n.settingsLanguage,
-              value: settings.language == AppLanguage.fr
-                  ? l10n.settingsLanguageFrench
-                  : l10n.settingsLanguageEnglish,
-              onTap: () async {
-                final value = await showGraceChoiceSheet<AppLanguage>(
-                  context: context,
-                  title: l10n.settingsLanguageSheetTitle,
-                  current: settings.language,
-                  options: [
-                    GraceChoiceOption(
-                      value: AppLanguage.fr,
-                      label: l10n.settingsLanguageFrench,
-                    ),
-                    GraceChoiceOption(
-                      value: AppLanguage.en,
-                      label: l10n.settingsLanguageEnglish,
-                    ),
-                  ],
-                );
-                if (value != null) {
-                  await store.setSettings(settings.copyWith(language: value));
-                }
-              },
-            ),
-            _Section(l10n.settingsAccessibility),
-            _SwitchRow(
-              label: l10n.settingsMotion,
-              subtitle: l10n.settingsMotionHint,
-              value: settings.reduceMotion,
-              onChanged: (v) =>
-                  store.setSettings(settings.copyWith(reduceMotion: v)),
-            ),
-            _SwitchRow(
-              label: l10n.settingsHaptics,
-              value: settings.haptics,
-              onChanged: (v) =>
-                  store.setSettings(settings.copyWith(haptics: v)),
-            ),
-            _Section(l10n.navProjects),
-            _SettingsRow(
-              label: l10n.settingsDeletion,
-              value: settings.deleteBehavior == DeleteBehavior.ask
-                  ? l10n.settingsValueAsk
-                  : l10n.settingsValueTrash,
-              onTap: () async {
-                final value = await showGraceChoiceSheet<DeleteBehavior>(
-                  context: context,
-                  title: l10n.settingsDeletionSheetTitle,
-                  current: settings.deleteBehavior,
-                  options: [
-                    GraceChoiceOption(
-                      value: DeleteBehavior.ask,
-                      label: l10n.settingsDeletionAsk,
-                    ),
-                    GraceChoiceOption(
-                      value: DeleteBehavior.trash,
-                      label: l10n.settingsDeletionTrash,
-                    ),
-                  ],
-                );
-                if (value != null) {
-                  await store.setSettings(
-                    settings.copyWith(deleteBehavior: value),
+              _Section(l10n.settingsAppearance),
+              _SettingsRow(
+                label: l10n.settingsTheme,
+                value: switch (settings.theme) {
+                  AppThemeMode.system => l10n.settingsThemeSystem,
+                  AppThemeMode.light => l10n.settingsThemeLight,
+                  AppThemeMode.dark => l10n.settingsThemeDark,
+                },
+                onTap: () async {
+                  final value = await showGraceChoiceSheet<AppThemeMode>(
+                    context: context,
+                    title: l10n.settingsThemeSheetTitle,
+                    current: settings.theme,
+                    options: [
+                      GraceChoiceOption(
+                        value: AppThemeMode.system,
+                        label: l10n.settingsThemeSystem,
+                      ),
+                      GraceChoiceOption(
+                        value: AppThemeMode.light,
+                        label: l10n.settingsThemeLight,
+                      ),
+                      GraceChoiceOption(
+                        value: AppThemeMode.dark,
+                        label: l10n.settingsThemeDark,
+                      ),
+                    ],
                   );
-                }
-              },
-            ),
-            _SettingsRow(
-              label: l10n.settingsTrash,
-              value: '${store.trashProjects.length}',
-              onTap: () => context.push('/projects/trash'),
-            ),
-            _Section(l10n.settingsStorageHelp),
-            _SettingsRow(
-              label: l10n.settingsStorageCache,
-              trailing: FutureBuilder(
-                future: store.storageStats(),
-                builder: (context, snapshot) {
-                  final data = snapshot.data;
-                  if (data == null) {
-                    return Text(
-                      l10n.storageComputing,
-                      style: GraceType.body.copyWith(color: p.secondary),
-                    );
+                  if (value != null) {
+                    await store.setSettings(settings.copyWith(theme: value));
                   }
-                  return Text(
-                    formatBytes(data.usedBytes),
-                    style: GraceType.body.copyWith(color: p.secondary),
-                  );
                 },
               ),
-              onTap: () => context.push('/settings/storage'),
-            ),
-            _SettingsRow(
-              label: l10n.helpTitle,
-              onTap: () => context.push('/settings/help'),
-            ),
-            const SizedBox(height: 24),
-          ],
+              _SettingsRow(
+                label: l10n.settingsLanguage,
+                value: settings.language == AppLanguage.fr
+                    ? l10n.settingsLanguageFrench
+                    : l10n.settingsLanguageEnglish,
+                onTap: () async {
+                  final value = await showGraceChoiceSheet<AppLanguage>(
+                    context: context,
+                    title: l10n.settingsLanguageSheetTitle,
+                    current: settings.language,
+                    options: [
+                      GraceChoiceOption(
+                        value: AppLanguage.fr,
+                        label: l10n.settingsLanguageFrench,
+                      ),
+                      GraceChoiceOption(
+                        value: AppLanguage.en,
+                        label: l10n.settingsLanguageEnglish,
+                      ),
+                    ],
+                  );
+                  if (value != null) {
+                    await store.setSettings(settings.copyWith(language: value));
+                  }
+                },
+              ),
+              _Section(l10n.settingsAccessibility),
+              _SwitchRow(
+                label: l10n.settingsMotion,
+                subtitle: l10n.settingsMotionHint,
+                value: settings.reduceMotion,
+                onChanged: (v) =>
+                    store.setSettings(settings.copyWith(reduceMotion: v)),
+              ),
+              _SwitchRow(
+                label: l10n.settingsHaptics,
+                value: settings.haptics,
+                onChanged: (v) =>
+                    store.setSettings(settings.copyWith(haptics: v)),
+              ),
+              _Section(l10n.navProjects),
+              _SettingsRow(
+                label: l10n.settingsDeletion,
+                value: settings.deleteBehavior == DeleteBehavior.ask
+                    ? l10n.settingsValueAsk
+                    : l10n.settingsValueTrash,
+                onTap: () async {
+                  final value = await showGraceChoiceSheet<DeleteBehavior>(
+                    context: context,
+                    title: l10n.settingsDeletionSheetTitle,
+                    current: settings.deleteBehavior,
+                    options: [
+                      GraceChoiceOption(
+                        value: DeleteBehavior.ask,
+                        label: l10n.settingsDeletionAsk,
+                      ),
+                      GraceChoiceOption(
+                        value: DeleteBehavior.trash,
+                        label: l10n.settingsDeletionTrash,
+                      ),
+                    ],
+                  );
+                  if (value != null) {
+                    await store.setSettings(
+                      settings.copyWith(deleteBehavior: value),
+                    );
+                  }
+                },
+              ),
+              _SettingsRow(
+                label: l10n.settingsTrash,
+                value: '${store.trashProjects.length}',
+                onTap: () => context.push('/projects/trash'),
+              ),
+              _Section(l10n.settingsStorageHelp),
+              _SettingsRow(
+                label: l10n.settingsStorageCache,
+                trailing: FutureBuilder(
+                  future: store.storageStats(),
+                  builder: (context, snapshot) {
+                    final data = snapshot.data;
+                    if (data == null) {
+                      return Text(
+                        l10n.storageComputing,
+                        style: GraceType.body.copyWith(color: p.secondary),
+                      );
+                    }
+                    return Text(
+                      formatBytes(data.usedBytes),
+                      style: GraceType.body.copyWith(color: p.secondary),
+                    );
+                  },
+                ),
+                onTap: () => context.push('/settings/storage'),
+              ),
+              _SettingsRow(
+                label: l10n.helpTitle,
+                onTap: () => context.push('/settings/help'),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
-      ),
-      bottomNavigationBar: GraceNavBar(
-        current: GraceTab.settings,
-        onSelect: (tab) {
-          switch (tab) {
-            case GraceTab.home:
-              context.go('/home');
-            case GraceTab.projects:
-              context.go('/projects');
-            case GraceTab.settings:
-              break;
-          }
-        },
+        bottomNavigationBar: GraceNavBar(
+          current: GraceTab.settings,
+          onSelect: (tab) {
+            switch (tab) {
+              case GraceTab.home:
+                context.go('/home');
+              case GraceTab.projects:
+                context.go('/projects');
+              case GraceTab.settings:
+                break;
+            }
+          },
+        ),
       ),
     );
   }

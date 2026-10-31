@@ -900,6 +900,7 @@ class _ExportProgressScreenState extends ConsumerState<ExportProgressScreen> {
                   GraceProgressBar(
                     value: indeterminate ? null : _progress,
                     indeterminate: indeterminate,
+                    semanticLabel: l10n.exportProgressLabel,
                   ),
                   const SizedBox(height: 16),
                   Text(

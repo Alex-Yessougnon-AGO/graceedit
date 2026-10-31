@@ -91,6 +91,8 @@ class ExportService {
         'startMs': clip.trimStartMs,
         'endMs': clip.trimEndMs,
         'rotation': clip.rotation,
+        'volume': (clip.volume / 100).clamp(0.0, 1.0),
+        'videoVolume': (project.videoVolume / 100).clamp(0.0, 1.0),
       });
     }
     if (clips.isEmpty) throw ExportException('empty');
@@ -102,20 +104,52 @@ class ExportService {
             'endMs': t.endMs,
             'x': t.x,
             'y': t.y,
+            'size': t.size,
+            'color': t.color,
+            'opacity': (t.opacity / 100).clamp(0.0, 1.0),
+            'align': t.align.name,
+            'background': t.background,
           },
         )
         .toList();
+    // La musique et les fondus sont rendus dans le film, comme dans
+    // l'aperçu. Un élément dont le fichier a disparu est simplement ignoré :
+    // la timeline le signale déjà.
+    final audios = <Map<String, Object>>[];
+    for (final audio in project.audios) {
+      final media = project.mediaById(audio.mediaId);
+      if (media == null || media.fileMissing) continue;
+      audios.add({
+        'path': media.uri,
+        'startMs': audio.startMs,
+        'trimStartMs': audio.trimStartMs,
+        'trimEndMs': audio.trimEndMs,
+        'volume': (audio.volume / 100).clamp(0.0, 1.0),
+        'fadeInMs': audio.fadeInMs,
+        'fadeOutMs': audio.fadeOutMs,
+      });
+    }
     final safeTitle = project.title
         .replaceAll(RegExp(r'[^\p{L}\p{N} _-]', unicode: true), '')
         .trim();
-    final name =
-        '${safeTitle.isEmpty ? 'GraceEdit' : safeTitle}_${DateTime.now().millisecondsSinceEpoch}.mp4';
+    // EXP-03 : le nom par défaut est le titre du projet (« Visite du
+    // marché.mp4 »). En cas de doublon, on ajoute « (2) » plutôt qu'un
+    // horodatage illisible.
+    final base = safeTitle.isEmpty ? 'GraceEdit' : safeTitle;
     final dir = await exportDirectory();
     await dir.create(recursive: true);
+    var name = '$base.mp4';
+    var suffix = 2;
+    while (await File(p.join(dir.path, name)).exists()) {
+      name = '$base ($suffix).mp4';
+      suffix++;
+    }
     final outPath = p.join(dir.path, name);
     final jobId = await gateway.startExport(
       clips: clips,
       texts: texts,
+      audios: audios,
+      fit: project.fitMode.name,
       width: config.width,
       height: config.height,
       outPath: outPath,

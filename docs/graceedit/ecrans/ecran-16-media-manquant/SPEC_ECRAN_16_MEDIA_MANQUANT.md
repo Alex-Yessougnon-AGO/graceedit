@@ -42,7 +42,7 @@ Fenêtre : « Ce fichier est différent. Le fichier choisi dure 1:52, l'original
 - **Tout reconnecté** (`prj05-termine-*`) : « Tous les médias sont reconnectés. », « Ouvrir le projet » actif, plus de lien « sans ces médias ».
 
 ## États (non dessinés)
-- **Vérification en cours** : texte « Vérification… » avec barre indéterminée sur la carte.
+- **Vérification en cours** (`prj05-verification-*`) : à la place des boutons, « Vérification du fichier… » avec une barre **indéterminée** ; les boutons reviennent à la fin de la vérification.
 - **Carte mémoire absente** : texte « Si ce fichier est sur une carte mémoire, insérez-la puis réessayez. »
 - **Autorisation d'accès perdue** : même parcours (le sélecteur du système redonne l'accès).
 - **Beaucoup de médias manquants** : la liste défile ; un en-tête fixe donne le compte.

@@ -16,7 +16,9 @@ class GraceSliderRow extends StatelessWidget {
     required this.display,
     this.divisions,
     this.bipolar = false,
+    this.onChangeStart,
     this.onChangeEnd,
+    this.trailing,
   });
 
   final String label;
@@ -27,7 +29,11 @@ class GraceSliderRow extends StatelessWidget {
   final String display;
   final int? divisions;
   final bool bipolar;
+  final ValueChanged<double>? onChangeStart;
   final ValueChanged<double>? onChangeEnd;
+
+  /// Commande placée à droite du libellé (par exemple un haut-parleur).
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +47,8 @@ class GraceSliderRow extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(label, style: GraceType.body)),
+              ?trailing,
+              const SizedBox(width: 4),
               Text(display, style: GraceType.body.copyWith(color: p.secondary)),
             ],
           ),
@@ -80,6 +88,7 @@ class GraceSliderRow extends StatelessWidget {
                       max: max,
                       divisions: divisions,
                       onChanged: onChanged,
+                      onChangeStart: onChangeStart,
                       onChangeEnd: onChangeEnd,
                       semanticFormatterCallback: (_) => display,
                     ),
@@ -164,7 +173,7 @@ class GraceSegmented extends StatelessWidget {
     required this.segments,
     required this.selected,
     required this.onSelected,
-    this.height = 40,
+    this.height = 48,
   });
 
   final List<GraceSegment> segments;
@@ -263,17 +272,21 @@ class GraceProgressBar extends StatelessWidget {
     required this.value,
     this.height = 8,
     this.indeterminate = false,
+    this.semanticLabel,
   });
 
   final double? value;
   final double height;
   final bool indeterminate;
 
+  /// Libellé traduit pour le lecteur d'écran (jamais de texte en dur ici).
+  final String? semanticLabel;
+
   @override
   Widget build(BuildContext context) {
     final p = context.grace;
     return Semantics(
-      label: 'progress',
+      label: semanticLabel,
       value: value == null ? null : '${(value! * 100).round()} %',
       child: ClipRRect(
         borderRadius: BorderRadius.circular(height / 2),

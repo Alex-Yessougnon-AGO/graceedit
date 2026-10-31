@@ -125,7 +125,7 @@ Pour chaque écran : **Entrées**, **Actions → destination**, **États**, **R�
 ### EDT-03 Texte — `ecran-07-texte`
 - **Ajout** : outil « Texte » → un texte est ajouté à la tête de lecture (3 s) → clavier ouvert → champ de saisie, préréglages (Titre, Sous-titre, Légende), « Terminé » (désactivé si vide) ; ✕ supprime un nouveau texte ou annule les changements.
 - **Texte sélectionné** : cadre, 4 poignées d'angle (redimensionner), poignée de rotation, glisser = déplacer, double appui = modifier ; barre : Modifier, Style, Couleur, Supprimer, Plus.
-- **Style** (feuille) : onglets Style, Police, Couleur, Fond ; six couleurs (≥ 48 dp), curseurs Taille et Opacité ; alternatives accessibles (grille de position, rotation par pas de 15°).
+- **Style** (feuille) : onglets Style, Police, Couleur, Fond ; six couleurs (≥ 48 dp), curseurs Taille et Opacité ; alternatives accessibles (alignement et position verticale par deux choix, rotation par pas de 15°).
 - La timeline s'agrandit à l'ajout pour que l'élément fasse ≥ 64 dp.
 
 ### EDT-04 Audio — `ecran-08-audio`

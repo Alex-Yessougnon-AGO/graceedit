@@ -127,8 +127,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          '${usable.length} '
-                          '${usable.length == 1 ? l10n.importOneVideo : l10n.importVideos(usable.length)}'
+                          '${l10n.importVideos(usable.length)}'
                           ' · ${l10n.importDurationTotal(formatDuration(total))}',
                           style: GraceType.bodyCompact.copyWith(
                             color: p.secondary,
@@ -168,7 +167,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          usable.isEmpty
+                          media.isEmpty
+                              ? l10n.importAddHint
+                              : usable.isEmpty
                               ? l10n.importNoneUsable
                               : ignored > 0
                               ? l10n.importIgnoredNotice
@@ -218,7 +219,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
             color: p.background,
             child: GracePrimaryButton(
-              label: ignored > 0
+              // Sans média utilisable, le bouton désactivé garde son libellé
+              // simple : « Commencer avec 1 média » serait faux (et le
+              // pluriel français mettrait 0 au singulier).
+              label: ignored > 0 && usable.isNotEmpty
                   ? l10n.importStartWithCount(usable.length)
                   : l10n.importStart,
               onPressed: canStart ? _start : null,

@@ -13,7 +13,9 @@
 | `FLUX_V1.md` | **L'ordre des écrans, la navigation, le fonctionnement et les actions attendues**, machines d'états, modèle de données, ordre de réalisation |
 | `INVENTAIRE_ECRANS_V1.md` | Liste des écrans, identifiants, dossiers, état |
 | `design/DESIGN_TOKENS.md` et `design/tokens.json` | Couleurs, typographie, dimensions, règles visuelles (valeurs exactes) |
-| `design/logo/` | Logo en SVG (principal, symbole, monochromes) |
+| `design/ASSETS_APPLICATION.md` | Icône d'application (couches adaptatives), icône de notification, splash, polices, jeu d'icônes |
+| `design/icones/` · `design/icone-application/` · `design/icone-notification/` · `design/logo/` | Les fichiers correspondants (SVG et PNG) |
+| `PHASE2_PLAN.md` | La version **suivante** (à ne pas implémenter ; seulement les points d'extension de §4) |
 | `ecrans/NN-nom/` | Pour chaque écran : `SPEC_*.md` (comportement) et les images (`*-planche.png` = clair et sombre côte à côte ; `*-clair.png`, `*-sombre.png` = taille réelle 1080 × 2400 px, soit 360 × 800 dp à 3x) |
 
 ## Règles de travail (à suivre à la lettre)

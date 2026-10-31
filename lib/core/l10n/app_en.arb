@@ -30,6 +30,7 @@
   "saveStateSaved": "Saved",
   "saveStateSaving": "Saving…",
   "saveStateFailed": "Not saved",
+  "projectSaved": "Project saved",
   "toastClipDeleted": "Clip deleted",
   "toastClipSplit": "Clip split",
   "toastTextDeleted": "Text deleted",
@@ -344,7 +345,7 @@
   "projectsViewGrid": "Grid",
   "projectsViewList": "List",
   "projectsTrash": "Trash",
-  "projectsSelectedCount": "{count, plural, =1{1 selected} other{{count} selected}}",
+  "projectsSelectedCount": "{count, plural, =0{0 selected} =1{1 selected} other{{count} selected}}",
   "@projectsSelectedCount": {
     "placeholders": {
       "count": {
@@ -364,7 +365,14 @@
       }
     }
   },
-  "projectsDeleteBody": "They stay 30 days in the trash, then they are deleted.",
+  "projectsDeleteBody": "{count, plural, =1{It stays 30 days in the trash, then it is deleted.} other{They stay 30 days in the trash, then they are deleted.}}",
+  "@projectsDeleteBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "projectsToTrash": "Move to trash",
   "projectsDeleteForever": "Delete permanently",
   "projectsDeleteForeverTitle": "Delete permanently?",
@@ -541,6 +549,35 @@
   "semanticsSelected": "Selected",
   "semanticsUnselected": "Not selected",
   "semanticsPlayhead": "Playhead",
+  "timelineClipLabel": "Clip {index}, duration {duration}",
+  "@timelineClipLabel": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "timelineTextLabel": "Text: {text}",
+  "@timelineTextLabel": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "timelineAudioLabel": "Music: {name}",
+  "@timelineAudioLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trimHandleStartLabel": "Start handle, drag to trim",
+  "trimHandleEndLabel": "End handle, drag to trim",
   "semanticsPosition": "Position {time}",
   "@semanticsPosition": {
     "placeholders": {
@@ -563,13 +600,29 @@
   "unitMinutesShort": "min",
   "unitSecondsShort": "s",
   "dateYesterday": "Yesterday",
+  "unitMinuteOne": "minute",
+  "unitMinuteOther": "minutes",
+  "unitSecondOne": "second",
+  "unitSecondOther": "seconds",
+  "monthJan": "Jan",
+  "monthFeb": "Feb",
+  "monthMar": "Mar",
+  "monthApr": "Apr",
+  "monthMay": "May",
+  "monthJun": "Jun",
+  "monthJul": "Jul",
+  "monthAug": "Aug",
+  "monthSep": "Sep",
+  "monthOct": "Oct",
+  "monthNov": "Nov",
+  "monthDec": "Dec",
   "projectLineLabel": "{title}, {duration}, {when}",
   "importDurationTotal": "Total duration {duration}",
   "importIgnoredCount": "{count, plural, =1{1 ignored} other{{count} ignored}}",
   "importIgnoredNotice": "The unsupported media will be ignored.",
   "importNoneUsable": "None of these media can be used. Add more to continue.",
   "importOneVideo": "1 video",
-  "importVideos": "{count} videos",
+  "importVideos": "{count, plural, =0{0 videos} =1{1 video} other{{count} videos}}",
   "welcomeGuarantees": "Garanties",
   "homeEmptyCta": "Start a video",
   "homeRecentCount": "Récents",
@@ -579,6 +632,7 @@
   "editorTools": "Outils",
   "editorClipTools": "Outils du clip",
   "editorSplitHint": "Place the playhead inside the clip",
+  "editorSelectClipFirst": "Select a clip on the timeline first.",
   "editorPreciseTrim": "Trim precisely",
   "editorDuplicateClip": "Duplicate clip",
   "editorAddToTimeline": "Add to timeline",
@@ -619,12 +673,15 @@
   "audioMuted": "Muted",
   "audioCustom": "Custom",
   "audioVolumeTitle": "Volume and fades",
-  "audioWaveformHint": "Faites glisser pour déplacer, les poignées pour rogner.",
+  "audioWaveformHint": "Drag to move, use the handles to trim.",
+  "audioPreparing": "Preparing audio…",
+  "audioUnreadable": "Unreadable audio",
+  "audioFadePreview": "Fade preview",
   "adjustApplied": "Applied to {count} clips",
-  "adjustResetDone": "Réglages réinitialisés",
+  "adjustResetDone": "Settings reset",
   "formatFillHint": "Fill: the image is cropped to cover the whole frame, no bars.",
-  "cropFree": "Libre",
-  "cropGridLabel": "Grille des tiers",
+  "cropFree": "Free",
+  "cropGridLabel": "Rule of thirds",
   "coverImageInProjects": "In your projects",
   "coverSlideHint": "Drag the frame to choose the image.",
   "coverModifiedNow": "Modified just now",
@@ -632,11 +689,37 @@
   "coverChooseAnother": "Choose another image",
   "coverUseVideoImage": "Use a video frame",
   "coverFromVideoLabel": "Video frame",
+  "coverPreviewSemantics": "Cover preview at {time}",
+  "@coverPreviewSemantics": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "coverFrameSemantics": "Frame at {time}",
+  "@coverFrameSemantics": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "coverForward": "Forward one second",
+  "coverBackward": "Back one second",
+  "coverNextImage": "Next frame",
+  "coverPrevImage": "Previous frame",
+  "coverExtractFailed": "Can't read this image",
+  "coverCropHintShort": "Drag to crop",
+  "coverResetAutomatic": "Back to automatic choice",
+  "coverPickFailed": "Can't open the image picker.",
+  "coverCopyFailed": "Can't copy this image.",
   "exportEstimatedSize": "Estimated size: about {size}",
   "exportStep": "Step {current} of {total}",
+  "exportProgressLabel": "Export progress",
   "exportInProgress": "Export in progress",
   "exportGallerySaved": "In your phone gallery",
-  "exportShare": "Partager",
+  "exportShare": "Share",
   "exportKeepEditing": "Keep editing",
   "exportRetry": "Retry",
   "exportTryStandardShort": "Try Standard · 720p",
@@ -653,7 +736,7 @@
   "projectsSortTitle": "Sort by",
   "projectsViewToggleGrid": "Switch to grid view",
   "projectsViewToggleList": "Switch to list view",
-  "projectsCount": "{count, plural, =0{Aucun projet} =1{1 projet} other{{count} projets}}",
+  "projectsCount": "{count, plural, =0{No projects} =1{1 project} other{{count} projects}}",
   "projectsSelectAll": "Select all",
   "projectsDeselectAll": "Deselect all",
   "projectsDuplicate": "Duplicate",

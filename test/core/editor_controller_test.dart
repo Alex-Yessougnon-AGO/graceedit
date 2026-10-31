@@ -83,6 +83,52 @@ void main() {
     });
   });
 
+  group('lecture pilotée par la vidéo', () {
+    test('la position réelle de la vidéo recale l’horloge', () async {
+      controller = await create();
+      controller.togglePlay();
+      expect(controller.isPlaying, isTrue);
+      // La vidéo annonce sa position toutes les 100 ms : les recalages
+      // arrivent par petits pas, jamais par un saut de 2 s.
+      controller.syncToPreview(1000);
+      controller.syncToPreview(2000);
+      expect(controller.positionMs, 2000);
+      controller.pause();
+      expect(controller.isPlaying, isFalse);
+    });
+
+    test(
+      'la tête suit la vidéo même en arrière (aucun recalage inverse)',
+      () async {
+        controller = await create();
+        controller.togglePlay();
+        for (final step in [1000, 2000, 3000, 4000, 5000]) {
+          controller.syncToPreview(step);
+        }
+        expect(controller.positionMs, 5000);
+        // La vidéo cale puis repart de 1 s : c'est elle qui est à l'écran,
+        // la tête s'aligne dessus au lieu de la forcer à sauter.
+        controller.syncToPreview(1000);
+        expect(controller.positionMs, 1000);
+        controller.pause();
+      },
+    );
+
+    test('sans lecture, la synchronisation est ignorée', () async {
+      controller = await create();
+      controller.syncToPreview(3000);
+      expect(controller.positionMs, 0);
+    });
+
+    test('la fin annoncée par la vidéo arrête et remet à zéro', () async {
+      controller = await create();
+      controller.togglePlay();
+      controller.syncToPreview(10000);
+      expect(controller.isPlaying, isFalse);
+      expect(controller.positionMs, 0);
+    });
+  });
+
   group('scinder', () {
     test('coupe au milieu en deux clips', () async {
       controller = await create();
@@ -237,6 +283,45 @@ void main() {
       await controller.flush();
       expect(controller.saveState, SaveState.saved);
       expect(store.projectById('p1')?.format, ProjectFormat.vertical);
+    });
+
+    test('réessai automatique : 6 fois toutes les 10 s (SYS-02)', () {
+      expect(EditorController.maxAutoRetries, 6);
+      expect(EditorController.retryEvery, const Duration(seconds: 10));
+    });
+
+    test('consumeRecovered revient à l’état nominal', () async {
+      controller = await create();
+      controller.consumeRecovered();
+      expect(controller.saveState, SaveState.saved);
+    });
+  });
+
+  group('média manquant', () {
+    test('marque le média, arrête la lecture et sauvegarde', () async {
+      controller = await create();
+      controller.togglePlay();
+      expect(controller.isPlaying, isTrue);
+
+      controller.markMediaMissing('m');
+      expect(controller.isPlaying, isFalse);
+      expect(controller.project.mediaById('m')?.missing, isTrue);
+      expect(controller.project.hasMissingMedia, isTrue);
+
+      await controller.flush();
+      expect(store.projectById('p1')?.mediaById('m')?.missing, isTrue);
+    });
+
+    test('sans effet sur un média inconnu ou déjà marqué', () async {
+      controller = await create();
+      controller.markMediaMissing('inconnu');
+      expect(controller.project.hasMissingMedia, isFalse);
+      expect(controller.saveState, SaveState.saved);
+
+      controller.markMediaMissing('m');
+      final first = controller.saveState;
+      controller.markMediaMissing('m');
+      expect(controller.saveState, first);
     });
   });
 }

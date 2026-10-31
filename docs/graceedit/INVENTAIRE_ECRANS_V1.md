@@ -33,4 +33,7 @@ Tous les écrans de la V1 sont **dessinés et spécifiés** (✔). Dossier = `ec
 | 27 | CMP-01 | Composants communs | `ecran-27-composants` | (composants) |
 
 **Non dessiné volontairement** : `IMP-01` (sélecteur de médias, écran du **système**) ; panneau de partage (système) ; clavier (système) ; menu de tri et fenêtre « Renommer » (dessinés dans `CMP-01`).
+**États ajoutés à la dernière révision** : onglets Style, Police et Fond du texte (`ecran-07-texte`), feuilles de langue et de suppression (`ecran-17-reglages`), corbeille vide (`ecran-15-projets`), vérification d'un média (`ecran-16-media-manquant`).
+**Ressources** : `design/` (logo, icônes, icône d'application, icône de notification, polices, jetons).
+**Non dessiné, post-V1** : tablettes et pliables (décrits dans `ecran-26-etats-editeur`, dessin prévu au lot P2-F de `PHASE2_PLAN.md`).
 **Hors V1** : voix off, enregistrement caméra, filtres, vitesse, sous-titres, transitions, mode Studio, modèles, bibliothèque d'assets, génération IA, campagnes.

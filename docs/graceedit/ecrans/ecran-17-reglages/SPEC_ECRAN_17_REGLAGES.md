@@ -25,7 +25,7 @@ Régler l'apparence, la langue, l'accessibilité et la suppression, et donner ac
 - La barre de navigation reste visible ; « Réglages » est l'onglet actif.
 
 ## États
-Liste normale · feuille de thème ouverte (`set01-theme-*`) · feuille de langue et feuille de suppression (même gabarit que la feuille de thème : choix unique avec bouton radio, valeur actuelle cochée).
+Liste normale · feuille de thème (`set01-theme-*`) · feuille de langue (`set01-langue-*` : « Langue de l'appareil » (défaut, avec la langue actuelle), « Français », « English ») · feuille de suppression (`set01-suppression-*` : « Demander à chaque fois » (défaut) ou « Toujours mettre à la corbeille »). Même gabarit : choix unique, bouton radio, valeur actuelle cochée, application immédiate.
 
 ## Règles de langue
 Espace insécable entre nombre et unité (« 1,8 Go »), avant `? ! : ; %`, et dans les guillemets français.

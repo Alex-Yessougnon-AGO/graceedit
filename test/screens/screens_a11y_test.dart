@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graceedit/core/models/project.dart';
+import 'package:graceedit/features/editor/cover_screen.dart';
 import 'package:graceedit/features/export/export_screen.dart';
 import 'package:graceedit/features/home/home_screen.dart';
 import 'package:graceedit/features/import/permission_screen.dart';
@@ -71,6 +72,21 @@ void main() {
       'EXP-04 Stockage insuffisant',
       const ExportErrorScreen(projectId: 'p1', cause: 'storage'),
       projects: [sampleProject()],
+    ),
+    _Case(
+      'EDT-07 Couverture (vidéo)',
+      const CoverScreen(projectId: 'p1'),
+      projects: [sampleProject()],
+    ),
+    _Case(
+      'EDT-07 Couverture (galerie)',
+      const CoverScreen(projectId: 'p1'),
+      projects: [
+        sampleProject().copyWith(
+          coverSource: CoverSource.gallery,
+          coverPath: '/tmp/graceedit-cover-test.jpg',
+        ),
+      ],
     ),
   ];
 

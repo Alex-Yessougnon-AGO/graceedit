@@ -25,22 +25,25 @@ final deviceInfoProvider = FutureProvider<DeviceInfo>((ref) async {
   return ref.watch(nativeGatewayProvider).deviceInfo();
 });
 
+// `read` et non `watch` : ces services gardent des caches (miniatures, ondes)
+// qui seraient perdus à chaque notification du magasin — donc à chaque
+// sauvegarde automatique.
 final mediaServiceProvider = Provider<MediaService>(
   (ref) =>
-      MediaService(ref.watch(nativeGatewayProvider), ref.watch(storeProvider)),
+      MediaService(ref.watch(nativeGatewayProvider), ref.read(storeProvider)),
 );
 
 final thumbnailServiceProvider = Provider<ThumbnailService>(
   (ref) => ThumbnailService(
     ref.watch(nativeGatewayProvider),
-    ref.watch(storeProvider),
+    ref.read(storeProvider),
   ),
 );
 
 final exportServiceProvider = Provider<ExportService>(
   (ref) => ExportService(
     ref.watch(nativeGatewayProvider),
-    () => ref.watch(storeProvider).exportsDir(),
+    () => ref.read(storeProvider).exportsDir(),
   ),
 );
 

@@ -394,6 +394,7 @@ class AudioItem {
   int get endMs => startMs + durationMs;
 
   AudioItem copyWith({
+    String? id,
     int? startMs,
     int? trimStartMs,
     int? trimEndMs,
@@ -401,7 +402,7 @@ class AudioItem {
     int? fadeInMs,
     int? fadeOutMs,
   }) => AudioItem(
-    id: id,
+    id: id ?? this.id,
     mediaId: mediaId,
     startMs: startMs ?? this.startMs,
     trimStartMs: trimStartMs ?? this.trimStartMs,
@@ -510,6 +511,9 @@ class Project {
     this.coverSource = CoverSource.automatic,
     this.coverTimeMs = 0,
     this.coverPath,
+    this.coverZoom = 1,
+    this.coverOffsetX = 0,
+    this.coverOffsetY = 0,
     this.trashedAt,
     this.recovered = false,
     this.lastExport,
@@ -529,6 +533,12 @@ class Project {
   final CoverSource coverSource;
   final int coverTimeMs;
   final String? coverPath;
+
+  /// Recadrage de la couverture de galerie : zoom (1 à 4) et décalage
+  /// normalisé par rapport à la taille affichée.
+  final double coverZoom;
+  final double coverOffsetX;
+  final double coverOffsetY;
   final DateTime? trashedAt;
   final bool recovered;
   final ExportRecord? lastExport;
@@ -586,6 +596,9 @@ class Project {
     CoverSource? coverSource,
     int? coverTimeMs,
     String? coverPath,
+    double? coverZoom,
+    double? coverOffsetX,
+    double? coverOffsetY,
     DateTime? trashedAt,
     bool clearTrash = false,
     bool? recovered,
@@ -605,6 +618,9 @@ class Project {
     coverSource: coverSource ?? this.coverSource,
     coverTimeMs: coverTimeMs ?? this.coverTimeMs,
     coverPath: coverPath ?? this.coverPath,
+    coverZoom: coverZoom ?? this.coverZoom,
+    coverOffsetX: coverOffsetX ?? this.coverOffsetX,
+    coverOffsetY: coverOffsetY ?? this.coverOffsetY,
     trashedAt: clearTrash ? null : (trashedAt ?? this.trashedAt),
     recovered: recovered ?? this.recovered,
     lastExport: lastExport ?? this.lastExport,
@@ -625,6 +641,9 @@ class Project {
     'coverSource': coverSource.name,
     'coverTimeMs': coverTimeMs,
     'coverPath': coverPath,
+    'coverZoom': coverZoom,
+    'coverOffsetX': coverOffsetX,
+    'coverOffsetY': coverOffsetY,
     'trashedAt': trashedAt?.toIso8601String(),
     'recovered': recovered,
     'lastExport': lastExport?.toJson(),
@@ -655,6 +674,9 @@ class Project {
       coverSource: CoverSource.fromKey(json['coverSource'] as String?),
       coverTimeMs: (json['coverTimeMs'] as num?)?.toInt() ?? 0,
       coverPath: json['coverPath'] as String?,
+      coverZoom: ((json['coverZoom'] as num?)?.toDouble() ?? 1).clamp(1, 4),
+      coverOffsetX: (json['coverOffsetX'] as num?)?.toDouble() ?? 0,
+      coverOffsetY: (json['coverOffsetY'] as num?)?.toDouble() ?? 0,
       trashedAt: DateTime.tryParse(json['trashedAt'] as String? ?? ''),
       recovered: json['recovered'] == true,
       lastExport: json['lastExport'] == null

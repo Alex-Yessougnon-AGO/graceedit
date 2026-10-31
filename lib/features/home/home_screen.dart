@@ -411,7 +411,7 @@ class _EmptyHome extends StatelessWidget {
             children: [
               DashedSlot(
                 onTap: onStart,
-                label: '',
+                label: l10n.homeNewProject,
                 height: constraints.maxWidth.clamp(0, 480) * 9 / 16,
                 icon: Icons.add,
               ),

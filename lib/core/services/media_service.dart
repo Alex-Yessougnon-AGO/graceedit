@@ -132,6 +132,11 @@ class ThumbnailService {
   final NativeGateway gateway;
   final AppStore store;
   final Map<String, Future<String?>> _pending = {};
+  final Map<String, Future<List<double>?>> _waves = {};
+
+  /// Plafond du cache disque des miniatures : au-delà, les plus anciennes
+  /// sont supprimées (le vidage manuel reste disponible dans les réglages).
+  static const int maxCachedFrames = 300;
 
   Future<String?> frame(MediaRef media, int timeMs, {int width = 192}) {
     if (!gateway.isAndroid) return Future.value(null);
@@ -141,25 +146,59 @@ class ThumbnailService {
         final dir = await store.cacheDir();
         final path = p.join(dir.path, '$key.jpg');
         if (await File(path).exists()) return path;
-        return await gateway.thumbnail(
+        final out = await gateway.thumbnail(
           uri: media.uri,
           timeMs: timeMs,
           maxWidth: width,
           outPath: path,
         );
+        // Un échec ne doit pas rester en cache : l'utilisateur peut rouvrir le
+        // projet après avoir reconnecté le média.
+        if (out == null) {
+          _pending.remove(key);
+          return null;
+        }
+        await _evictOldest(dir);
+        return out;
       } catch (_) {
+        _pending.remove(key);
         return null;
       }
     });
   }
 
-  Future<List<double>?> waveform(MediaRef media) async {
-    if (!gateway.isAndroid) return null;
+  Future<void> _evictOldest(Directory dir) async {
     try {
-      final values = await gateway.waveform(uri: media.uri, buckets: 90);
-      return values.isEmpty ? null : values;
+      final files = <File>[];
+      await for (final entity in dir.list()) {
+        if (entity is File && entity.path.endsWith('.jpg')) files.add(entity);
+      }
+      if (files.length <= maxCachedFrames) return;
+      final stats = <File, DateTime>{};
+      for (final file in files) {
+        stats[file] = await file.lastModified();
+      }
+      final ordered = files.toList()
+        ..sort((a, b) => stats[a]!.compareTo(stats[b]!));
+      for (var i = 0; i < ordered.length - maxCachedFrames; i++) {
+        await ordered[i].delete();
+      }
     } catch (_) {
-      return null;
+      // Le nettoyage ne doit jamais faire échouer une miniature.
     }
+  }
+
+  /// `[]` : le média n'a pas de piste audio (aucune onde à dessiner).
+  /// `null` : le décodage a échoué (EDT-04 affiche « Audio illisible »).
+  Future<List<double>?> waveform(MediaRef media) {
+    if (!gateway.isAndroid) return Future.value(const <double>[]);
+    return _waves.putIfAbsent(media.id, () async {
+      try {
+        return await gateway.waveform(uri: media.uri, buckets: 90);
+      } catch (_) {
+        _waves.remove(media.id);
+        return null;
+      }
+    });
   }
 }

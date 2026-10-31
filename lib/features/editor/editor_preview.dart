@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'dart:ui' as ui;
@@ -27,7 +28,11 @@ class EditorPreview extends StatelessWidget {
   final EditorController controller;
   final ValueChanged<TextItem> onEditText;
   final VoidCallback onMoveTextStart;
-  final void Function(TextItem item, double dx, double dy) onMoveText;
+
+  /// Déplacement normalisé : fractions de la largeur et de la hauteur de
+  /// l'aperçu (le texte suit exactement le doigt).
+  final void Function(TextItem item, double fractionX, double fractionY)
+  onMoveText;
   final VoidCallback onMoveTextEnd;
   final VoidCallback onReconnect;
 
@@ -65,13 +70,24 @@ class EditorPreview extends StatelessWidget {
               child: AspectRatio(
                 aspectRatio: project.format.ratio,
                 child: _MediaPreview(
-                  key: ValueKey('${clip!.id}-${media.uri}'),
+                  // La clé ne dépend que du fichier : scinder ou rogner un clip
+                  // ne doit pas recréer le lecteur (aperçu noir le temps de
+                  // l'initialisation).
+                  key: ValueKey(media.uri),
                   media: media,
-                  clip: clip,
+                  clip: clip!,
                   project: project,
                   positionInClip: controller.localPositionInClip(clip),
+                  clipStartMs: controller.clipStartMs(clip),
                   playing: controller.isPlaying,
+                  onPosition: controller.syncToPreview,
                   compareOriginal: controller.compareOriginal,
+                  volume:
+                      (clip.volume / 100).clamp(0.0, 1.0) *
+                      (project.videoVolume / 100).clamp(0.0, 1.0),
+                  onFailed: media.isVideo
+                      ? () => controller.markMediaMissing(media.id)
+                      : null,
                 ),
               ),
             ),
@@ -97,7 +113,11 @@ class EditorPreview extends StatelessWidget {
                                   controller.selectedId == text.id,
                               onDoubleTap: () => onEditText(text),
                               onDragStart: onMoveTextStart,
-                              onDrag: (dx, dy) => onMoveText(text, dx, dy),
+                              onDrag: (dx, dy) => onMoveText(
+                                text,
+                                size.width <= 0 ? 0 : dx / size.width,
+                                size.height <= 0 ? 0 : dy / size.height,
+                              ),
                               onDragEnd: onMoveTextEnd,
                             ),
                         ],
@@ -184,16 +204,35 @@ class _MediaPreview extends StatefulWidget {
     required this.clip,
     required this.project,
     required this.positionInClip,
+    required this.clipStartMs,
     required this.playing,
     required this.compareOriginal,
+    required this.volume,
+    required this.onPosition,
+    this.onFailed,
   });
 
   final MediaRef media;
   final Clip clip;
   final Project project;
   final double positionInClip;
+
+  /// Position du clip dans le projet : permet de traduire la position du
+  /// lecteur (dans le média) en position globale de la timeline.
+  final int clipStartMs;
   final bool playing;
   final bool compareOriginal;
+
+  /// Volume effectif du clip (son du clip × son de la vidéo), de 0 à 1.
+  final double volume;
+
+  /// Position réelle annoncée par la vidéo pendant la lecture (en ms depuis
+  /// le début du projet). L'horloge de l'éditeur s'aligne dessus.
+  final ValueChanged<int> onPosition;
+
+  /// Appelé quand la lecture native échoue (fichier illisible, accès perdu,
+  /// codec non pris en charge) pour basculer vers l'état « média manquant ».
+  final VoidCallback? onFailed;
 
   @override
   State<_MediaPreview> createState() => _MediaPreviewState();
@@ -202,65 +241,206 @@ class _MediaPreview extends StatefulWidget {
 class _MediaPreviewState extends State<_MediaPreview> {
   VideoPlayerController? _video;
   bool _failed = false;
+  bool _buffering = false;
+  bool _showBuffering = false;
+  Timer? _bufferTimer;
+  double? _appliedVolume;
+  DateTime? _lastSeek;
+  bool _seeking = false;
+  bool _awaitingPlay = false;
+  bool _syncQueued = false;
+
+  /// Jeton de génération : une initialisation lente ne doit jamais écraser
+  /// un lecteur plus récent quand l'utilisateur change vite de clip.
+  int _generation = 0;
 
   @override
   void initState() {
     super.initState();
-    _init();
+    _init(_generation);
   }
 
   @override
   void didUpdateWidget(covariant _MediaPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.media.uri != widget.media.uri) {
+      _generation++;
+      _video?.removeListener(_onVideoEvent);
       _video?.dispose();
       _video = null;
       _failed = false;
-      _init();
+      _buffering = false;
+      _showBuffering = false;
+      _bufferTimer?.cancel();
+      _appliedVolume = null;
+      _seeking = false;
+      _init(_generation);
       return;
     }
     _sync();
   }
 
-  Future<void> _init() async {
+  Future<void> _init(int generation) async {
     if (!widget.media.isVideo) return;
+    VideoPlayerController? controller;
     try {
-      final controller = widget.media.uri.startsWith('content://')
+      controller = widget.media.uri.startsWith('content://')
           ? VideoPlayerController.contentUri(Uri.parse(widget.media.uri))
           : VideoPlayerController.file(File(widget.media.uri));
       await controller.initialize();
-      await controller.seekTo(
-        Duration(milliseconds: widget.positionInClip.round()),
-      );
-      if (!mounted) {
+      if (!mounted || generation != _generation) {
         await controller.dispose();
         return;
       }
+      await controller.setVolume(widget.volume);
+      _appliedVolume = widget.volume;
+      await controller.seekTo(
+        Duration(milliseconds: widget.positionInClip.round()),
+      );
+      if (!mounted || generation != _generation) {
+        await controller.dispose();
+        return;
+      }
+      controller.addListener(_onVideoEvent);
       _video = controller;
       setState(() {});
       _sync();
     } catch (_) {
-      if (mounted) setState(() => _failed = true);
+      await controller?.dispose();
+      if (!mounted || generation != _generation) return;
+      setState(() => _failed = true);
+      widget.onFailed?.call();
     }
   }
 
-  void _sync() {
+  /// Surveille la lecture native : une erreur ExoPlayer bascule vers l'état
+  /// « média manquant » au lieu de geler sur une image statique.
+  void _onVideoEvent() {
     final video = _video;
-    if (video == null || !video.value.isInitialized) return;
+    if (video == null || !mounted) return;
+    final value = video.value;
+    if (value.hasError && !_failed) {
+      setState(() => _failed = true);
+      widget.onFailed?.call();
+      return;
+    }
+    // Le loader n'apparaît qu'après 350 ms de chargement continu : les
+    // micro-tampons d'un décodeur modeste ne doivent pas faire clignoter
+    // l'aperçu pendant la lecture.
+    if (value.isBuffering != _buffering) {
+      _buffering = value.isBuffering;
+      _bufferTimer?.cancel();
+      if (_buffering) {
+        _bufferTimer = Timer(const Duration(milliseconds: 350), () {
+          if (mounted && _buffering) {
+            setState(() => _showBuffering = true);
+          }
+        });
+      } else if (_showBuffering) {
+        setState(() => _showBuffering = false);
+      }
+    }
+    // La vidéo est la référence de temps pendant la lecture : on annonce sa
+    // position réelle pour que la timeline et le son ajouté la suivent, au
+    // lieu de recaler la vidéo en boucle (cause des saccades). On annonce
+    // aussi pendant un chargement : l'horloge reste alors sur l'image figée
+    // au lieu d'avancer sans elle.
+    if (widget.playing && value.isCompleted) {
+      widget.onPosition(widget.clipStartMs + widget.clip.durationMs);
+      return;
+    }
+    if (value.isPlaying) _awaitingPlay = false;
+    if (widget.playing &&
+        (value.isPlaying || value.isBuffering) &&
+        value.duration > Duration.zero &&
+        value.position < value.duration - const Duration(milliseconds: 200)) {
+      final globalMs =
+          widget.clipStartMs +
+          value.position.inMilliseconds -
+          widget.clip.trimStartMs;
+      widget.onPosition(globalMs);
+    }
+  }
+
+  void _seekTo(VideoPlayerController video, Duration target) {
+    // Un seul recalage à la fois : sans ce garde, les battements à 20 Hz
+    // empilaient des `seekTo` qui se marchaient dessus et saccadaient.
+    if (_seeking) return;
+    _seeking = true;
+    _lastSeek = DateTime.now();
+    video.seekTo(target).whenComplete(() {
+      _seeking = false;
+      // Le recalage demandé pendant le précédent est appliqué au prochain
+      // battement via _sync().
+    });
+  }
+
+  /// Les appels au lecteur (`play`, `seekTo`, `setVolume`) notifient leurs
+  /// écouteurs en synchrone : les faire pendant la construction déclenchait
+  /// « setState() called during build » via [EditorController.syncToPreview]
+  /// et cassait l'image en cours. On les diffère donc après l'image.
+  void _sync() {
+    if (_syncQueued) return;
+    _syncQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncQueued = false;
+      if (mounted) _syncNow();
+    });
+  }
+
+  void _syncNow() {
+    final video = _video;
+    if (video == null || !video.value.isInitialized || _failed) return;
+    // Le volume doit suivre les curseurs en direct, sans attendre la fermeture
+    // de la feuille (EDT-04).
+    if (_appliedVolume != widget.volume) {
+      _appliedVolume = widget.volume;
+      video.setVolume(widget.volume);
+    }
     if (widget.playing) {
-      if (!video.value.isPlaying) video.play();
-    } else {
-      if (video.value.isPlaying) video.pause();
-      final target = Duration(milliseconds: widget.positionInClip.round());
-      final current = video.value.position;
-      if ((target - current).abs() > const Duration(milliseconds: 350)) {
-        video.seekTo(target);
+      // Pendant la lecture, on ne recale jamais la vidéo : c'est elle qui
+      // donne le temps (voir _onVideoEvent et
+      // [EditorController.syncToPreview]). Un seek ici relançait un
+      // chargement à chaque seconde et noircissait l'aperçu.
+      //
+      // On ne relance pas non plus `play()` pendant un chargement : le
+      // lecteur a déjà reçu l'ordre, le répéter ne fait que générer des
+      // événements de tampon en boucle.
+      final duration = video.value.duration;
+      final atEnd =
+          duration > Duration.zero &&
+          video.value.position >= duration - const Duration(milliseconds: 120);
+      if (!video.value.isPlaying &&
+          !video.value.isBuffering &&
+          !video.value.isCompleted &&
+          !atEnd &&
+          !_awaitingPlay) {
+        _awaitingPlay = true;
+        video.play();
+      }
+      return;
+    }
+    _awaitingPlay = false;
+    if (video.value.isPlaying) video.pause();
+    // En pause, l'image doit suivre la tête de lecture immédiatement :
+    // c'est ce qui donne l'impression que « la timeline ne marche pas »
+    // quand on fait glisser le doigt.
+    final target = Duration(milliseconds: widget.positionInClip.round());
+    final drift = (target - video.value.position).abs();
+    final now = DateTime.now();
+    if (drift > const Duration(milliseconds: 60)) {
+      if (_lastSeek == null ||
+          now.difference(_lastSeek!) > const Duration(milliseconds: 90)) {
+        _seekTo(video, target);
       }
     }
   }
 
   @override
   void dispose() {
+    _generation++;
+    _bufferTimer?.cancel();
+    _video?.removeListener(_onVideoEvent);
     _video?.dispose();
     super.dispose();
   }
@@ -306,10 +486,14 @@ class _MediaPreviewState extends State<_MediaPreview> {
     final adjustments = widget.compareOriginal
         ? const Adjustments()
         : widget.clip.adjustments;
-    Widget child = ColorFiltered(
-      colorFilter: _adjustmentFilter(adjustments),
-      child: content,
-    );
+    // Sans ajustement, on saute le filtre matriciel : il coûte un passage
+    // GPU à chaque image pour un résultat identique.
+    Widget child = adjustments.isNeutral
+        ? content
+        : ColorFiltered(
+            colorFilter: _adjustmentFilter(adjustments),
+            child: content,
+          );
     if (widget.clip.rotation != 0) {
       child = RotatedBox(
         quarterTurns: (widget.clip.rotation / 90).round(),
@@ -325,11 +509,32 @@ class _MediaPreviewState extends State<_MediaPreview> {
         child: child,
       );
     }
+    // « Remplir » recadre pour couvrir le cadre ; « Ajuster » montre l'image
+    // entière avec des bandes (EDT-05). L'aperçu ignorait ce réglage.
+    final fit = widget.project.fitMode == FitMode.fill
+        ? BoxFit.cover
+        : BoxFit.contain;
     return ColoredBox(
       color: GraceColors.preview,
       child: SizedBox.expand(
         child: ClipRect(
-          child: FittedBox(fit: BoxFit.cover, child: child),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              FittedBox(fit: fit, child: child),
+              // En pause (scrub, rognage), l'image affichée reste la
+              // référence : un loader par-dessus ferait clignoter l'aperçu
+              // à chaque seek. Il ne sert que pendant la lecture.
+              if (_showBuffering && widget.playing && !_failed)
+                const Center(
+                  child: SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: CircularProgressIndicator(strokeWidth: 3),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -185,6 +185,8 @@ class NativeGateway {
   Future<String> startExport({
     required List<Map<String, Object>> clips,
     required List<Map<String, Object>> texts,
+    required List<Map<String, Object>> audios,
+    required String fit,
     required int width,
     required int height,
     required String outPath,
@@ -193,6 +195,8 @@ class NativeGateway {
       'clips': clips,
       'texts': const <String>[],
       'subtitles': texts,
+      'audios': audios,
+      'fit': fit,
       'width': width,
       'height': height,
       'outPath': outPath,
