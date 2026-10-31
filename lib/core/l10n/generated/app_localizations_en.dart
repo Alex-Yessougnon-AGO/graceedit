@@ -437,6 +437,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get textPosition => 'Position';
 
   @override
+  String get textPositionTop => 'Top';
+
+  @override
+  String get textPositionMiddle => 'Middle';
+
+  @override
+  String get textPositionBottom => 'Bottom';
+
+  @override
   String get textRotation => 'Rotation';
 
   @override
@@ -1480,6 +1489,45 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editorDetachAudio => 'Detach audio';
+
+  @override
+  String get editorSpeed => 'Speed';
+
+  @override
+  String get editorLockTrack => 'Lock track';
+
+  @override
+  String get editorUnlockTrack => 'Unlock track';
+
+  @override
+  String get guideTitle => 'Welcome to the editor';
+
+  @override
+  String get guideIntro =>
+      'Everything takes one or two gestures. The essentials:';
+
+  @override
+  String get guidePlay =>
+      'Play: tap ▶, drag the timeline to move frame by frame.';
+
+  @override
+  String get guideSplit =>
+      'Cut: place the playhead, then Split — or double-tap a clip.';
+
+  @override
+  String get guideTrim =>
+      'Trim: pull the handles at a clip\'s edges. Trimmed parts can come back; cut-then-deleted parts never do.';
+
+  @override
+  String get guideDrag =>
+      'Move: drag a text or music item along the timeline; it snaps to the right places by itself.';
+
+  @override
+  String get guideZoom =>
+      'Zoom: pinch the timeline or use the + and − magnifiers.';
+
+  @override
+  String get guideStart => 'Let\'s go';
 
   @override
   String get toastAudioDetached => 'Audio detached · clip sound is muted';

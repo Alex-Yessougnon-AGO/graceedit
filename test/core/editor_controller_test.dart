@@ -140,6 +140,58 @@ void main() {
     });
   });
 
+  group('bornes de scission, vitesse et verrouillage', () {
+    test(
+      'étirer après scission ne fait pas revenir le morceau coupé',
+      () async {
+        controller = await create();
+        controller.selectClip('c1');
+        controller.seek(4000);
+        expect(controller.splitSelectedClip(), isTrue);
+        // Supprimer le second morceau, puis étirer le premier au maximum.
+        controller.removeClip(controller.project.clips[1].id);
+        final first = controller.project.clips.single;
+        controller.trimClip(first.id, end: 10000);
+        expect(controller.project.clips.single.trimEndMs, 4000);
+        expect(controller.durationMs, 4000);
+      },
+    );
+
+    test('la vitesse divise la durée timeline du clip', () async {
+      controller = await create();
+      controller.setClipSpeed('c1', 2);
+      expect(controller.project.clips.single.speed, 2);
+      expect(controller.durationMs, 5000);
+      controller.setClipSpeed('c1', 0.5);
+      expect(controller.durationMs, 20000);
+    });
+
+    test('une piste verrouillée refuse les modifications', () async {
+      controller = await create();
+      final item = controller.addText();
+      controller.setTextsLocked(true);
+      controller.moveText(item.id, 2000);
+      expect(controller.project.texts.single.startMs, item.startMs);
+      controller.removeText(item.id);
+      expect(controller.project.texts, hasLength(1));
+      controller.setTextsLocked(false);
+      controller.moveText(item.id, 2000);
+      expect(controller.project.texts.single.startMs, isNot(item.startMs));
+    });
+  });
+
+  group('fluidité des modifications', () {
+    test('sélectionner un clip ne coupe pas la lecture', () async {
+      controller = await create();
+      controller.togglePlay();
+      expect(controller.isPlaying, isTrue);
+      controller.selectClip('c1');
+      expect(controller.isPlaying, isTrue);
+      expect(controller.selection, SelectionType.clip);
+      controller.pause();
+    });
+  });
+
   group('détacher l’audio (phase 2)', () {
     test('crée un élément audio aligné et coupe le son du clip', () async {
       controller = await create();

@@ -52,6 +52,7 @@ class Settings {
     this.sort = SortOrder.recent,
     this.view = ProjectView.list,
     this.welcomeSeen = false,
+    this.editorGuideSeen = false,
     this.notificationsAsked = 0,
   });
 
@@ -63,6 +64,7 @@ class Settings {
   final SortOrder sort;
   final ProjectView view;
   final bool welcomeSeen;
+  final bool editorGuideSeen;
   final int notificationsAsked;
 
   Settings copyWith({
@@ -74,6 +76,7 @@ class Settings {
     SortOrder? sort,
     ProjectView? view,
     bool? welcomeSeen,
+    bool? editorGuideSeen,
     int? notificationsAsked,
   }) => Settings(
     theme: theme ?? this.theme,
@@ -84,6 +87,7 @@ class Settings {
     sort: sort ?? this.sort,
     view: view ?? this.view,
     welcomeSeen: welcomeSeen ?? this.welcomeSeen,
+    editorGuideSeen: editorGuideSeen ?? this.editorGuideSeen,
     notificationsAsked: notificationsAsked ?? this.notificationsAsked,
   );
 
@@ -96,6 +100,7 @@ class Settings {
     'sort': sort.name,
     'view': view.name,
     'welcomeSeen': welcomeSeen,
+    'editorGuideSeen': editorGuideSeen,
     'notificationsAsked': notificationsAsked,
   };
 
@@ -108,6 +113,7 @@ class Settings {
     sort: SortOrder.fromKey(json['sort'] as String?),
     view: ProjectView.fromKey(json['view'] as String?),
     welcomeSeen: json['welcomeSeen'] == true,
+    editorGuideSeen: json['editorGuideSeen'] == true,
     notificationsAsked: (json['notificationsAsked'] as num?)?.toInt() ?? 0,
   );
 }

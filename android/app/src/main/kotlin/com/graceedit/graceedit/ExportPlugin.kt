@@ -200,7 +200,11 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
             val rotation = (c["rotation"] as? Number)?.toInt() ?: 0
             val clipVolume = ((c["volume"] as? Number)?.toFloat() ?: 1f)
                 .coerceIn(0f, 1f)
-            val clipDurationMs = (endMs - startMs).coerceAtLeast(1L)
+            val speed = ((c["speed"] as? Number)?.toFloat() ?: 1f)
+                .coerceIn(0.25f, 4f)
+            // Durée sur la timeline : durée du média divisée par la vitesse.
+            val clipDurationMs = ((endMs - startMs) / speed).toLong()
+                .coerceAtLeast(1L)
             val mediaItem = MediaItem.Builder()
                 .setUri(path)
                 .setClippingConfiguration(
@@ -237,6 +241,14 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
                         SubtitleOverlay(localCues, subtitleStyle, width, height))))
             }
             val audioProcessors = mutableListOf<AudioProcessor>()
+            if (speed != 1f) {
+                // Même effet de vitesse que l'aperçu (video_player).
+                // Transformer ajuste aussi les horodatages audio via son
+                // SpeedChangingMediaSource interne (vérifié à l'export :
+                // la durée du fichier suit la vitesse demandée).
+                videoEffects.add(
+                    androidx.media3.effect.SpeedChangeEffect(speed))
+            }
             val gain = clipVolume * videoVolume
             if (gain < 0.999f) {
                 audioProcessors.add(

@@ -50,6 +50,18 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
       _controller = EditorController(store: store, project: project);
       _controller!.addListener(_syncAudio);
       _syncAudio();
+      // Tutoriel débutant : montré une seule fois, à la première
+      // ouverture d'un éditeur (ensuite, bouton « ? » dans la barre).
+      if (!store.settings.editorGuideSeen) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (!mounted) return;
+          await _showGuide();
+          final current = ref.read(storeProvider);
+          await current.setSettings(
+            current.settings.copyWith(editorGuideSeen: true),
+          );
+        });
+      }
     }
   }
 
@@ -139,6 +151,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
                     controller: controller,
                     l10n: l10n,
                     onBack: _leave,
+                    onGuide: _showGuide,
                   ),
                   if (controller.saveState == SaveState.failed)
                     _SaveFailedBanner(
@@ -177,6 +190,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
                     onCover: _showCover,
                     onSplit: _split,
                     onVolume: _showVolume,
+                    onSpeed: _showSpeed,
                     onCrop: _showCrop,
                     onDelete: _deleteSelected,
                     onMore: _showMore,
@@ -408,38 +422,74 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
               ],
             );
           } else if (tab == 1) {
-            content = Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            content = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final preset in TextPreset.values)
-                  ChoiceChip(
-                    label: Text(switch (preset) {
-                      TextPreset.title => l10n.textPresetTitle,
-                      TextPreset.subtitle => l10n.textPresetSubtitle,
-                      TextPreset.caption => l10n.textPresetCaption,
-                    }),
-                    selected: value.preset == preset,
-                    onSelected: (_) {
-                      value = value.copyWith(preset: preset);
-                      controller.updateText(value);
-                      setSheetState(() {});
-                    },
-                  ),
-                for (final align in TextAlign.values)
-                  ChoiceChip(
-                    label: Text(switch (align) {
-                      TextAlign.left => l10n.textPresetAlignLeft,
-                      TextAlign.right => l10n.textPresetAlignRight,
-                      _ => l10n.textPresetAlignCenter,
-                    }),
-                    selected: value.align == align,
-                    onSelected: (_) {
-                      value = value.copyWith(align: align);
-                      controller.updateText(value);
-                      setSheetState(() {});
-                    },
-                  ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final preset in TextPreset.values)
+                      ChoiceChip(
+                        label: Text(switch (preset) {
+                          TextPreset.title => l10n.textPresetTitle,
+                          TextPreset.subtitle => l10n.textPresetSubtitle,
+                          TextPreset.caption => l10n.textPresetCaption,
+                        }),
+                        selected: value.preset == preset,
+                        onSelected: (_) {
+                          value = value.copyWith(preset: preset);
+                          controller.updateText(value);
+                          setSheetState(() {});
+                        },
+                      ),
+                    // Seulement les trois alignements proposés aux
+                    // débutants : TextAlign.values contient aussi start,
+                    // end et justify, qui s'affichaient tous « Centré ».
+                    for (final align in [
+                      TextAlign.left,
+                      TextAlign.center,
+                      TextAlign.right,
+                    ])
+                      ChoiceChip(
+                        label: Text(switch (align) {
+                          TextAlign.left => l10n.textPresetAlignLeft,
+                          TextAlign.right => l10n.textPresetAlignRight,
+                          _ => l10n.textPresetAlignCenter,
+                        }),
+                        selected: value.align == align,
+                        onSelected: (_) {
+                          value = value.copyWith(align: align);
+                          controller.updateText(value);
+                          setSheetState(() {});
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Disposition verticale (EDT-03) : appliquée en direct
+                // dans l'aperçu, comme le reste du style.
+                Text(l10n.textPosition, style: GraceType.body),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final position in [
+                      (0.18, l10n.textPositionTop),
+                      (0.5, l10n.textPositionMiddle),
+                      (0.82, l10n.textPositionBottom),
+                    ])
+                      ChoiceChip(
+                        label: Text(position.$2),
+                        selected: (value.y - position.$1).abs() < 0.05,
+                        onSelected: (_) {
+                          value = value.copyWith(y: position.$1);
+                          controller.updateText(value);
+                          setSheetState(() {});
+                        },
+                      ),
+                  ],
+                ),
               ],
             );
           } else if (tab == 2) {
@@ -862,6 +912,93 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// Vitesse du clip : quatre choix lisibles pour un débutant, appliqués
+  /// immédiatement à l'aperçu et à l'export.
+  Future<void> _showSpeed() async {
+    final l10n = AppLocalizations.of(context);
+    final clip = controller.selectedClip;
+    if (clip == null) return;
+    await showGraceSheet<void>(
+      context: context,
+      editorPanel: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final current = controller.selectedClip ?? clip;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.editorSpeed, style: GraceType.sheetTitle),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final speed in [0.5, 1.0, 1.5, 2.0])
+                      ChoiceChip(
+                        label: Text(
+                          '×${speed.toString().replaceAll('.0', '')}',
+                        ),
+                        selected: current.speed == speed,
+                        onSelected: (_) {
+                          controller.setClipSpeed(current.id, speed);
+                          setSheetState(() {});
+                        },
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Mini-guide des gestes pour débutants : affiché une fois à la première
+  /// ouverture de l'éditeur, puis toujours accessible par le bouton « ? ».
+  Future<void> _showGuide() async {
+    final l10n = AppLocalizations.of(context);
+    await showGraceSheet<void>(
+      context: context,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.guideTitle, style: GraceType.sheetTitle),
+            const SizedBox(height: 8),
+            Text(l10n.guideIntro, style: GraceType.body),
+            const SizedBox(height: 16),
+            for (final tip in [
+              (Icons.play_circle_outline, l10n.guidePlay),
+              (Icons.content_cut, l10n.guideSplit),
+              (Icons.swap_horiz, l10n.guideTrim),
+              (Icons.open_with, l10n.guideDrag),
+              (Icons.zoom_in, l10n.guideZoom),
+            ]) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(tip.$1, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(tip.$2, style: GraceType.body)),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+            GracePrimaryButton(
+              label: l10n.guideStart,
+              onPressed: () => Navigator.of(sheetContext).pop(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1687,10 +1824,12 @@ class _EditorTopBar extends StatelessWidget {
     required this.controller,
     required this.l10n,
     required this.onBack,
+    required this.onGuide,
   });
   final EditorController controller;
   final AppLocalizations l10n;
   final VoidCallback onBack;
+  final VoidCallback onGuide;
 
   @override
   Widget build(BuildContext context) {
@@ -1755,6 +1894,13 @@ class _EditorTopBar extends StatelessWidget {
               ],
             ),
           ),
+          // Aide débutant toujours accessible (le guide s'affiche aussi
+          // automatiquement à la première ouverture).
+          GraceIconAction(
+            icon: Icons.help_outline,
+            semanticLabel: l10n.guideTitle,
+            onPressed: onGuide,
+          ),
           GracePillAction(
             label: l10n.actionExport,
             onPressed: controller.isEmpty
@@ -1812,6 +1958,7 @@ class _EditorToolbar extends StatelessWidget {
     required this.onCover,
     required this.onSplit,
     required this.onVolume,
+    required this.onSpeed,
     required this.onCrop,
     required this.onDelete,
     required this.onMore,
@@ -1834,6 +1981,7 @@ class _EditorToolbar extends StatelessWidget {
   final VoidCallback onCover;
   final VoidCallback onSplit;
   final VoidCallback onVolume;
+  final VoidCallback onSpeed;
   final VoidCallback onCrop;
   final VoidCallback onDelete;
   final VoidCallback onMore;
@@ -1942,6 +2090,11 @@ class _EditorToolbar extends StatelessWidget {
                                   icon: Icons.volume_up,
                                   label: l10n.editorVolume,
                                   onTap: onVolume,
+                                ),
+                                _Tool(
+                                  icon: Icons.speed,
+                                  label: l10n.editorSpeed,
+                                  onTap: onSpeed,
                                 ),
                                 _Tool(
                                   icon: Icons.crop_free,

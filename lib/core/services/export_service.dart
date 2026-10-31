@@ -91,6 +91,7 @@ class ExportService {
         'startMs': clip.trimStartMs,
         'endMs': clip.trimEndMs,
         'rotation': clip.rotation,
+        'speed': clip.speed,
         'volume': (clip.volume / 100).clamp(0.0, 1.0),
         'videoVolume': (project.videoVolume / 100).clamp(0.0, 1.0),
       });

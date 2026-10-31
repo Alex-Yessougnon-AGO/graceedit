@@ -132,8 +132,11 @@ class EditorController extends ChangeNotifier {
     return _project.mediaById(clip.mediaId);
   }
 
+  /// Position dans le média (en ms) correspondant à la tête de lecture :
+  /// le temps timeline est dilaté par la vitesse du clip.
   double localPositionInClip(Clip clip) {
-    final local = _positionMs - clipStartMs(clip) + clip.trimStartMs;
+    final speed = clip.speed <= 0 ? 1.0 : clip.speed;
+    final local = clip.trimStartMs + (_positionMs - clipStartMs(clip)) * speed;
     return local
         .clamp(clip.trimStartMs.toDouble(), clip.trimEndMs.toDouble())
         .toDouble();
@@ -330,7 +333,10 @@ class EditorController extends ChangeNotifier {
   }
 
   void selectClip(String id) {
-    if (isPlaying) pause();
+    // Ne jamais couper la lecture pour une sélection : toucher un clip
+    // pendant la lecture pour le régler (volume, vitesse…) doit laisser
+    // la vidéo jouer, comme dans CapCut/VN. Couper au tap donnait
+    // l'impression que « la vidéo se coupe dès qu'on modifie ».
     selection = SelectionType.clip;
     selectedId = id;
     notifyListeners();
@@ -562,9 +568,18 @@ class EditorController extends ChangeNotifier {
     final start = clipStartMs(clip);
     final offset = _positionMs - start;
     if (offset < 100 || offset > clip.durationMs - 100) return false;
-    final cut = clip.trimStartMs + offset;
-    final left = clip.copyWith(trimEndMs: cut);
-    final right = clip.copyWith(id: _uuid.v4(), trimStartMs: cut);
+    // Le point de coupe est calculé dans le temps du média (vitesse
+    // comprise) : `offset` est un temps timeline.
+    final speed = clip.speed <= 0 ? 1.0 : clip.speed;
+    final cut = clip.trimStartMs + (offset * speed).round();
+    // Bornes dures : étirer un des deux morceaux ne fera jamais
+    // réapparaître le contenu de l'autre (coupé, puis peut-être supprimé).
+    final left = clip.copyWith(trimEndMs: cut, limitEndMs: cut);
+    final right = clip.copyWith(
+      id: _uuid.v4(),
+      trimStartMs: cut,
+      limitStartMs: cut,
+    );
     final index = _project.clips.indexWhere((c) => c.id == clip.id);
     final clips = [..._project.clips];
     clips[index] = left;
@@ -590,10 +605,29 @@ class EditorController extends ChangeNotifier {
         : clip.trimEndMs;
     var newStart = start ?? clip.trimStartMs;
     var newEnd = end ?? clip.trimEndMs;
-    newEnd = newEnd.clamp(100, maxEnd);
-    newStart = newStart.clamp(0, newEnd - 100);
+    // Bornes de scission éventuelles : le contenu coupé au-delà ne
+    // réapparaît jamais quand on étire le clip.
+    final limitStart = clip.limitStartMs ?? 0;
+    final limitEnd = clip.limitEndMs ?? maxEnd;
+    final effectiveMaxEnd = limitEnd < maxEnd ? limitEnd : maxEnd;
+    newEnd = newEnd.clamp(100, effectiveMaxEnd);
+    newStart = newStart.clamp(limitStart, newEnd - 100);
     clips[index] = clip.copyWith(trimStartMs: newStart, trimEndMs: newEnd);
     _apply(_project.copyWith(clips: clips));
+  }
+
+  /// Vitesse d'un clip (Phase 2) : 0,5× à 2×. La durée timeline suit
+  /// automatiquement (durée du média ÷ vitesse), l'aperçu lit à cette
+  /// vitesse et l'export applique le même effet (Media3).
+  void setClipSpeed(String id, double speed) {
+    final clips = [..._project.clips];
+    final index = clips.indexWhere((c) => c.id == id);
+    if (index < 0) return;
+    clips[index] = clips[index].copyWith(speed: speed.clamp(0.25, 4));
+    _apply(_project.copyWith(clips: clips));
+    selection = SelectionType.clip;
+    selectedId = id;
+    notifyListeners();
   }
 
   void removeClip(String id) {
@@ -634,6 +668,20 @@ class EditorController extends ChangeNotifier {
         if (m.id == mediaId) m.copyWith(missing: true) else m,
     ];
     _apply(_project.copyWith(media: next), undoable: false);
+  }
+
+  /// Verrouille ou déverrouille une piste (textes ou musiques) : les
+  /// éléments verrouillés restent lus mais ne sont plus modifiables.
+  void setTextsLocked(bool locked) {
+    if (_project.textsLocked == locked) return;
+    _apply(_project.copyWith(textsLocked: locked));
+    notifyListeners();
+  }
+
+  void setAudiosLocked(bool locked) {
+    if (_project.audiosLocked == locked) return;
+    _apply(_project.copyWith(audiosLocked: locked));
+    notifyListeners();
   }
 
   /// Coupe ou rétablit toute la piste Musique (les volumes individuels
@@ -724,6 +772,7 @@ class EditorController extends ChangeNotifier {
   }
 
   void updateText(TextItem item) {
+    if (_project.textsLocked) return;
     final texts = [
       for (final t in _project.texts)
         if (t.id == item.id) item else t,
@@ -738,6 +787,7 @@ class EditorController extends ChangeNotifier {
   /// bords des éléments, temps ronds). C'était impossible : le texte ne
   /// répondait qu'au toucher, contrairement aux éléments audio.
   void moveText(String id, int deltaMs) {
+    if (_project.textsLocked) return;
     final index = _project.texts.indexWhere((t) => t.id == id);
     if (index < 0) return;
     final text = _project.texts[index];
@@ -752,6 +802,7 @@ class EditorController extends ChangeNotifier {
   /// Règle le début ou la durée d'un texte par ses poignées (500 ms min,
   /// borné au projet).
   void resizeText(String id, {int leftDeltaMs = 0, int rightDeltaMs = 0}) {
+    if (_project.textsLocked) return;
     final index = _project.texts.indexWhere((t) => t.id == id);
     if (index < 0) return;
     final text = _project.texts[index];
@@ -776,6 +827,7 @@ class EditorController extends ChangeNotifier {
   }
 
   void removeText(String id) {
+    if (_project.textsLocked) return;
     _apply(
       _project.copyWith(
         texts: _project.texts.where((t) => t.id != id).toList(),
@@ -818,6 +870,7 @@ class EditorController extends ChangeNotifier {
   }
 
   void updateAudio(AudioItem item) {
+    if (_project.audiosLocked) return;
     // Les fondus ne peuvent jamais dépasser la durée de l'élément (EDT-04).
     final duration = item.durationMs;
     final fadeIn = item.fadeInMs.clamp(0, duration);
@@ -834,6 +887,7 @@ class EditorController extends ChangeNotifier {
   /// Déplace un élément audio sur la timeline (jamais avant zéro),
   /// avec la même aimantation que les textes.
   void moveAudio(String id, int deltaMs) {
+    if (_project.audiosLocked) return;
     final index = _project.audios.indexWhere((a) => a.id == id);
     if (index < 0) return;
     final audio = _project.audios[index];
@@ -850,6 +904,7 @@ class EditorController extends ChangeNotifier {
   /// Le bord gauche avance dans le média en gardant le contenu aligné ; le bord
   /// droit s'arrête à la fin du fichier. 100 ms minimum, comme les clips.
   void resizeAudio(String id, {int leftDeltaMs = 0, int rightDeltaMs = 0}) {
+    if (_project.audiosLocked) return;
     final index = _project.audios.indexWhere((a) => a.id == id);
     if (index < 0) return;
     final audio = _project.audios[index];
@@ -885,6 +940,7 @@ class EditorController extends ChangeNotifier {
 
   /// EDT-04, barre de l'audio : coupe l'élément à la tête de lecture.
   bool splitSelectedAudio() {
+    if (_project.audiosLocked) return false;
     final audio = selectedAudio;
     if (audio == null) return false;
     final offset = _positionMs - audio.startMs;
@@ -949,6 +1005,7 @@ class EditorController extends ChangeNotifier {
   }
 
   void removeAudio(String id) {
+    if (_project.audiosLocked) return;
     _apply(
       _project.copyWith(
         audios: _project.audios.where((a) => a.id != id).toList(),

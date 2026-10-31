@@ -33,7 +33,10 @@ Future<T?> showGraceSheet<T>({
     isScrollControlled: true,
     useRootNavigator: true,
     backgroundColor: editorPanel ? context.grace.background : context.grace.nav,
-    barrierColor: GraceColors.scrim,
+    // Panneaux de l'éditeur : barrière transparente pour que l'aperçu
+    // reste pleinement visible pendant les réglages (temps réel), au lieu
+    // d'être assombri par le voile modal.
+    barrierColor: editorPanel ? Colors.transparent : GraceColors.scrim,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(
         top: Radius.circular(GraceRadius.sheet),

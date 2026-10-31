@@ -196,6 +196,9 @@ class Clip {
     this.rotation = 0,
     this.mirrored = false,
     this.straighten = 0,
+    this.speed = 1,
+    this.limitStartMs,
+    this.limitEndMs,
   });
 
   final String id;
@@ -203,12 +206,24 @@ class Clip {
   final int trimStartMs;
   final int trimEndMs;
   final double volume;
+
+  /// Vitesse de lecture (Phase 2) : la durée sur la timeline est la durée
+  /// du média divisée par la vitesse.
+  final double speed;
+
+  /// Bornes dures créées par un scindage : au-delà, le contenu a été
+  /// coupé (et éventuellement supprimé), étirer le clip ne doit jamais
+  /// le faire réapparaître. Null = borné seulement par le média.
+  final int? limitStartMs;
+  final int? limitEndMs;
   final Adjustments adjustments;
   final int rotation;
   final bool mirrored;
   final double straighten;
 
-  int get durationMs => (trimEndMs - trimStartMs).clamp(0, 1 << 62);
+  int get durationMs => ((trimEndMs - trimStartMs) / (speed <= 0 ? 1 : speed))
+      .round()
+      .clamp(0, 1 << 62);
 
   Clip copyWith({
     String? id,
@@ -220,6 +235,9 @@ class Clip {
     int? rotation,
     bool? mirrored,
     double? straighten,
+    double? speed,
+    int? limitStartMs,
+    int? limitEndMs,
   }) => Clip(
     id: id ?? this.id,
     mediaId: mediaId ?? this.mediaId,
@@ -230,6 +248,9 @@ class Clip {
     rotation: rotation ?? this.rotation,
     mirrored: mirrored ?? this.mirrored,
     straighten: straighten ?? this.straighten,
+    speed: speed ?? this.speed,
+    limitStartMs: limitStartMs ?? this.limitStartMs,
+    limitEndMs: limitEndMs ?? this.limitEndMs,
   );
 
   Map<String, Object?> toJson() => {
@@ -238,6 +259,9 @@ class Clip {
     'trimStartMs': trimStartMs,
     'trimEndMs': trimEndMs,
     'volume': volume,
+    'speed': speed,
+    'limitStartMs': limitStartMs,
+    'limitEndMs': limitEndMs,
     'adjustments': adjustments.toJson(),
     'rotation': rotation,
     'mirrored': mirrored,
@@ -250,6 +274,9 @@ class Clip {
     trimStartMs: (json['trimStartMs'] as num?)?.toInt() ?? 0,
     trimEndMs: (json['trimEndMs'] as num?)?.toInt() ?? 0,
     volume: (json['volume'] as num?)?.toDouble() ?? 100,
+    speed: (json['speed'] as num?)?.toDouble() ?? 1,
+    limitStartMs: (json['limitStartMs'] as num?)?.toInt(),
+    limitEndMs: (json['limitEndMs'] as num?)?.toInt(),
     adjustments: Adjustments.fromJson(
       (json['adjustments'] as Map?)?.cast<String, Object?>(),
     ),
@@ -509,6 +536,8 @@ class Project {
     this.audios = const [],
     this.videoVolume = 100,
     this.musicMuted = false,
+    this.textsLocked = false,
+    this.audiosLocked = false,
     this.coverSource = CoverSource.automatic,
     this.coverTimeMs = 0,
     this.coverPath,
@@ -535,6 +564,11 @@ class Project {
   /// Piste Musique coupée d'un geste (Phase 2) : les volumes individuels
   /// des éléments sont conservés, seul le rendu est mis à zéro.
   final bool musicMuted;
+
+  /// Pistes verrouillées (Phase 2) : les éléments restent visibles et
+  /// lus, mais ne peuvent plus être déplacés, rognés ni supprimés.
+  final bool textsLocked;
+  final bool audiosLocked;
   final CoverSource coverSource;
   final int coverTimeMs;
   final String? coverPath;
@@ -599,6 +633,8 @@ class Project {
     List<AudioItem>? audios,
     double? videoVolume,
     bool? musicMuted,
+    bool? textsLocked,
+    bool? audiosLocked,
     CoverSource? coverSource,
     int? coverTimeMs,
     String? coverPath,
@@ -622,6 +658,8 @@ class Project {
     audios: audios ?? this.audios,
     videoVolume: videoVolume ?? this.videoVolume,
     musicMuted: musicMuted ?? this.musicMuted,
+    textsLocked: textsLocked ?? this.textsLocked,
+    audiosLocked: audiosLocked ?? this.audiosLocked,
     coverSource: coverSource ?? this.coverSource,
     coverTimeMs: coverTimeMs ?? this.coverTimeMs,
     coverPath: coverPath ?? this.coverPath,
@@ -646,6 +684,8 @@ class Project {
     'audios': audios.map((a) => a.toJson()).toList(),
     'videoVolume': videoVolume,
     'musicMuted': musicMuted,
+    'textsLocked': textsLocked,
+    'audiosLocked': audiosLocked,
     'coverSource': coverSource.name,
     'coverTimeMs': coverTimeMs,
     'coverPath': coverPath,
@@ -680,6 +720,8 @@ class Project {
       audios: list('audios', AudioItem.fromJson),
       videoVolume: (json['videoVolume'] as num?)?.toDouble() ?? 100,
       musicMuted: json['musicMuted'] == true,
+      textsLocked: json['textsLocked'] == true,
+      audiosLocked: json['audiosLocked'] == true,
       coverSource: CoverSource.fromKey(json['coverSource'] as String?),
       coverTimeMs: (json['coverTimeMs'] as num?)?.toInt() ?? 0,
       coverPath: json['coverPath'] as String?,

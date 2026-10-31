@@ -210,6 +210,21 @@ class EditorTimeline extends StatelessWidget {
                                   (textLaneMap[text.id] ?? 0) *
                                   (GraceDims.subTrack + 4),
                             ),
+                          // Verrou de piste : les textes restent lus
+                          // mais ne sont plus modifiables.
+                          Positioned(
+                            left: 2,
+                            top: 2,
+                            child: _LaneLockButton(
+                              locked: project.textsLocked,
+                              label: project.textsLocked
+                                  ? l10n.editorUnlockTrack
+                                  : l10n.editorLockTrack,
+                              onTap: () => controller.setTextsLocked(
+                                !project.textsLocked,
+                              ),
+                            ),
+                          ),
                           // Poignées de durée du texte sélectionné.
                           ..._textTrimHandles(
                             project,
@@ -243,6 +258,19 @@ class EditorTimeline extends StatelessWidget {
                                   (audioLaneMap[audio.id] ?? 0) *
                                   (GraceDims.subTrack + 4),
                             ),
+                          Positioned(
+                            left: 2,
+                            top: 2,
+                            child: _LaneLockButton(
+                              locked: project.audiosLocked,
+                              label: project.audiosLocked
+                                  ? l10n.editorUnlockTrack
+                                  : l10n.editorLockTrack,
+                              onTap: () => controller.setAudiosLocked(
+                                !project.audiosLocked,
+                              ),
+                            ),
+                          ),
                           ..._audioTrimHandles(
                             project,
                             origin,
@@ -788,6 +816,48 @@ class EditorTimeline extends StatelessWidget {
         ),
       ),
     ];
+  }
+}
+
+/// Bouton cadenas d'une piste (textes ou musiques), en haut à gauche de
+/// la piste. Verrouillée : icône fermée, éléments non modifiables.
+class _LaneLockButton extends StatelessWidget {
+  const _LaneLockButton({
+    required this.locked,
+    required this.label,
+    required this.onTap,
+  });
+
+  final bool locked;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.grace;
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: p.surface,
+            border: Border.all(color: p.outline),
+          ),
+          child: Icon(
+            locked ? Icons.lock : Icons.lock_open,
+            size: 17,
+            color: locked ? GraceColors.accent : p.text,
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -245,6 +245,7 @@ class _MediaPreviewState extends State<_MediaPreview> {
   bool _showBuffering = false;
   Timer? _bufferTimer;
   double? _appliedVolume;
+  double? _appliedSpeed;
   DateTime? _lastSeek;
   bool _seeking = false;
   bool _awaitingPlay = false;
@@ -354,10 +355,13 @@ class _MediaPreviewState extends State<_MediaPreview> {
         (value.isPlaying || value.isBuffering) &&
         value.duration > Duration.zero &&
         value.position < value.duration - const Duration(milliseconds: 200)) {
+      // Le temps timeline avance à la vitesse du clip : on convertit la
+      // position média annoncée par le lecteur.
+      final speed = widget.clip.speed <= 0 ? 1.0 : widget.clip.speed;
       final globalMs =
           widget.clipStartMs +
-          value.position.inMilliseconds -
-          widget.clip.trimStartMs;
+          ((value.position.inMilliseconds - widget.clip.trimStartMs) / speed)
+              .round();
       widget.onPosition(globalMs);
     }
   }
@@ -396,6 +400,12 @@ class _MediaPreviewState extends State<_MediaPreview> {
     if (_appliedVolume != widget.volume) {
       _appliedVolume = widget.volume;
       video.setVolume(widget.volume);
+    }
+    // Vitesse du clip : appliquée dès qu'elle change, comme le volume.
+    final speed = widget.clip.speed <= 0 ? 1.0 : widget.clip.speed;
+    if (_appliedSpeed != speed) {
+      _appliedSpeed = speed;
+      video.setPlaybackSpeed(speed);
     }
     if (widget.playing) {
       // Pendant la lecture, on ne recale jamais la vidéo : c'est elle qui

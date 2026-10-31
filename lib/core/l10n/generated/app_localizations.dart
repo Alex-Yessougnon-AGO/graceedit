@@ -872,6 +872,24 @@ abstract class AppLocalizations {
   /// **'Position'**
   String get textPosition;
 
+  /// No description provided for @textPositionTop.
+  ///
+  /// In fr, this message translates to:
+  /// **'Haut'**
+  String get textPositionTop;
+
+  /// No description provided for @textPositionMiddle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Milieu'**
+  String get textPositionMiddle;
+
+  /// No description provided for @textPositionBottom.
+  ///
+  /// In fr, this message translates to:
+  /// **'Bas'**
+  String get textPositionBottom;
+
   /// No description provided for @textRotation.
   ///
   /// In fr, this message translates to:
@@ -2701,6 +2719,72 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Détacher l’audio'**
   String get editorDetachAudio;
+
+  /// No description provided for @editorSpeed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Vitesse'**
+  String get editorSpeed;
+
+  /// No description provided for @editorLockTrack.
+  ///
+  /// In fr, this message translates to:
+  /// **'Verrouiller la piste'**
+  String get editorLockTrack;
+
+  /// No description provided for @editorUnlockTrack.
+  ///
+  /// In fr, this message translates to:
+  /// **'Déverrouiller la piste'**
+  String get editorUnlockTrack;
+
+  /// No description provided for @guideTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Bienvenue dans l’éditeur'**
+  String get guideTitle;
+
+  /// No description provided for @guideIntro.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tout se fait en un ou deux gestes. Voici l’essentiel :'**
+  String get guideIntro;
+
+  /// No description provided for @guidePlay.
+  ///
+  /// In fr, this message translates to:
+  /// **'Lecture : touchez ▶, faites glisser la timeline pour vous déplacer image par image.'**
+  String get guidePlay;
+
+  /// No description provided for @guideSplit.
+  ///
+  /// In fr, this message translates to:
+  /// **'Couper : placez la tête de lecture, puis Scinder — ou touchez deux fois un clip.'**
+  String get guideSplit;
+
+  /// No description provided for @guideTrim.
+  ///
+  /// In fr, this message translates to:
+  /// **'Raccourcir : tirez les poignées aux extrémités d’un clip. Ce qui est rogné peut revenir, ce qui est coupé puis supprimé, jamais.'**
+  String get guideTrim;
+
+  /// No description provided for @guideDrag.
+  ///
+  /// In fr, this message translates to:
+  /// **'Déplacer : faites glisser un texte ou une musique le long de la timeline, ils s’aimantent tout seuls aux bons endroits.'**
+  String get guideDrag;
+
+  /// No description provided for @guideZoom.
+  ///
+  /// In fr, this message translates to:
+  /// **'Zoomer : pincez la timeline ou utilisez les loupes + et −.'**
+  String get guideZoom;
+
+  /// No description provided for @guideStart.
+  ///
+  /// In fr, this message translates to:
+  /// **'C’est parti'**
+  String get guideStart;
 
   /// No description provided for @toastAudioDetached.
   ///

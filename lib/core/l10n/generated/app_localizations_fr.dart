@@ -441,6 +441,15 @@ class AppLocalizationsFr extends AppLocalizations {
   String get textPosition => 'Position';
 
   @override
+  String get textPositionTop => 'Haut';
+
+  @override
+  String get textPositionMiddle => 'Milieu';
+
+  @override
+  String get textPositionBottom => 'Bas';
+
+  @override
   String get textRotation => 'Rotation';
 
   @override
@@ -1495,6 +1504,45 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get editorDetachAudio => 'Détacher l’audio';
+
+  @override
+  String get editorSpeed => 'Vitesse';
+
+  @override
+  String get editorLockTrack => 'Verrouiller la piste';
+
+  @override
+  String get editorUnlockTrack => 'Déverrouiller la piste';
+
+  @override
+  String get guideTitle => 'Bienvenue dans l’éditeur';
+
+  @override
+  String get guideIntro =>
+      'Tout se fait en un ou deux gestes. Voici l’essentiel :';
+
+  @override
+  String get guidePlay =>
+      'Lecture : touchez ▶, faites glisser la timeline pour vous déplacer image par image.';
+
+  @override
+  String get guideSplit =>
+      'Couper : placez la tête de lecture, puis Scinder — ou touchez deux fois un clip.';
+
+  @override
+  String get guideTrim =>
+      'Raccourcir : tirez les poignées aux extrémités d’un clip. Ce qui est rogné peut revenir, ce qui est coupé puis supprimé, jamais.';
+
+  @override
+  String get guideDrag =>
+      'Déplacer : faites glisser un texte ou une musique le long de la timeline, ils s’aimantent tout seuls aux bons endroits.';
+
+  @override
+  String get guideZoom =>
+      'Zoomer : pincez la timeline ou utilisez les loupes + et −.';
+
+  @override
+  String get guideStart => 'C’est parti';
 
   @override
   String get toastAudioDetached => 'Audio détaché · le son du clip est coupé';
