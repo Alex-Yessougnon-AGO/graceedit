@@ -151,6 +151,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
                             controller: controller,
                             onEditText: _editText,
                             onAddMedia: _addMedia,
+                            onSplitClip: _split,
                             onReconnect: () =>
                                 context.push('/projects/${project.id}/relink'),
                           )
@@ -158,6 +159,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
                             controller: controller,
                             onEditText: _editText,
                             onAddMedia: _addMedia,
+                            onSplitClip: _split,
                             onReconnect: () =>
                                 context.push('/projects/${project.id}/relink'),
                           ),
@@ -1424,12 +1426,14 @@ class _PortraitBody extends StatelessWidget {
     required this.onEditText,
     required this.onAddMedia,
     required this.onReconnect,
+    required this.onSplitClip,
   });
 
   final EditorController controller;
   final ValueChanged<TextItem> onEditText;
   final VoidCallback onAddMedia;
   final VoidCallback onReconnect;
+  final VoidCallback onSplitClip;
 
   @override
   Widget build(BuildContext context) {
@@ -1452,7 +1456,11 @@ class _PortraitBody extends StatelessWidget {
         ),
         _PlayLine(controller: controller),
         Expanded(
-          child: EditorTimeline(controller: controller, onAddMedia: onAddMedia),
+          child: EditorTimeline(
+            controller: controller,
+            onAddMedia: onAddMedia,
+            onSplitClip: onSplitClip,
+          ),
         ),
       ],
     );
@@ -1465,12 +1473,14 @@ class _LandscapeBody extends StatelessWidget {
     required this.onEditText,
     required this.onAddMedia,
     required this.onReconnect,
+    required this.onSplitClip,
   });
 
   final EditorController controller;
   final ValueChanged<TextItem> onEditText;
   final VoidCallback onAddMedia;
   final VoidCallback onReconnect;
+  final VoidCallback onSplitClip;
 
   @override
   Widget build(BuildContext context) {
@@ -1506,6 +1516,7 @@ class _LandscapeBody extends StatelessWidget {
               child: EditorTimeline(
                 controller: controller,
                 onAddMedia: onAddMedia,
+                onSplitClip: onSplitClip,
               ),
             ),
           ],
@@ -1570,6 +1581,18 @@ class _PlayLine extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          // Zoom de la timeline sans pincement (alternative accessible) :
+          // la tête de lecture est fixe au centre, le zoom la conserve.
+          _UndoAction(
+            icon: Icons.zoom_out,
+            label: l10n.editorZoomOut,
+            onTap: () => controller.setZoom(controller.zoom / 1.4),
+          ),
+          _UndoAction(
+            icon: Icons.zoom_in,
+            label: l10n.editorZoomIn,
+            onTap: () => controller.setZoom(controller.zoom * 1.4),
+          ),
           _UndoAction(
             icon: Icons.undo,
             label: l10n.actionUndo,

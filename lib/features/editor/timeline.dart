@@ -14,15 +14,24 @@ import '../../core/ui/thumb.dart';
 import '../../core/utils/formatters.dart';
 import 'editor_controller.dart';
 
+/// Hauteur de la piste « Son vidéo » (forme d'onde du son d'origine,
+/// séparée de la bande d'images comme dans CapCut/VN).
+const double _nativeAudioTrack = 28;
+
 class EditorTimeline extends StatelessWidget {
   const EditorTimeline({
     super.key,
     required this.controller,
     required this.onAddMedia,
+    this.onSplitClip,
   });
 
   final EditorController controller;
   final VoidCallback onAddMedia;
+
+  /// Double-tap sur un clip : scinder à la tête de lecture (l'écran
+  /// affiche le message « Clip scindé · Annuler »).
+  final VoidCallback? onSplitClip;
 
   double get _pxPerSec => GraceDims.timelinePxPerSec * controller.zoom;
 
@@ -49,15 +58,25 @@ class EditorTimeline extends StatelessWidget {
             : width / 2;
         final hasTexts = project.texts.isNotEmpty;
         final hasAudio = project.audios.isNotEmpty;
+        // Piste « Son vidéo » : présente dès qu'un clip vidéo existe. Ses
+        // segments restent alignés sous les clips (mêmes positions), le
+        // son suit donc le rognage et le scindage sans état supplémentaire.
+        final hasNativeAudio = project.clips.any((clip) {
+          final media = project.mediaById(clip.mediaId);
+          return media != null && media.kind == MediaKind.video;
+        });
         var top = GraceDims.ruler + 4;
         final videoTop = top;
         top += GraceDims.videoTrack + 8;
+        final nativeTop = top;
+        if (hasNativeAudio) top += _nativeAudioTrack + 8;
         final textTop = top;
         if (hasTexts) top += GraceDims.subTrack + 8;
         final audioTop = top;
         // La tête de lecture s'arrête au bas de la dernière voie : elle ne
         // traverse pas la zone vide de la timeline (maquette EDT-01).
         var contentBottom = videoTop + GraceDims.videoTrack;
+        if (hasNativeAudio) contentBottom = nativeTop + _nativeAudioTrack;
         if (hasTexts) contentBottom = textTop + GraceDims.subTrack;
         if (hasAudio) contentBottom = audioTop + GraceDims.subTrack;
 
@@ -126,6 +145,28 @@ class EditorTimeline extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (hasNativeAudio)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: nativeTop,
+                    height: _nativeAudioTrack,
+                    child: ClipRect(
+                      child: Stack(
+                        clipBehavior: ui.Clip.hardEdge,
+                        children: [
+                          for (final clip in project.clips)
+                            _positionedClipWave(
+                              context,
+                              clip,
+                              origin,
+                              project,
+                              durations[clip.id] ?? 0,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 if (hasTexts)
                   Positioned(
                     left: 0,
@@ -138,6 +179,8 @@ class EditorTimeline extends StatelessWidget {
                         children: [
                           for (final text in project.texts)
                             _positionedText(context, text, origin),
+                          // Poignées de durée du texte sélectionné.
+                          ..._textTrimHandles(project, origin, l10n),
                         ],
                       ),
                     ),
@@ -229,6 +272,14 @@ class EditorTimeline extends StatelessWidget {
         excludeSemantics: true,
         child: GestureDetector(
           onTap: () => controller.selectClip(clip.id),
+          // Double-tap : scinder à la tête de lecture, sans passer par la
+          // barre d'outils (geste standard des éditeurs mobiles).
+          onDoubleTap: onSplitClip == null
+              ? null
+              : () {
+                  controller.selectClip(clip.id);
+                  onSplitClip!.call();
+                },
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(GraceRadius.thumb),
@@ -259,12 +310,7 @@ class EditorTimeline extends StatelessWidget {
                       ),
                     )
                   else
-                    _ClipFrames(
-                      media: media,
-                      clip: clip,
-                      width: clipWidth,
-                      muted: clip.volume <= 0 || project.videoVolumeValue <= 0,
-                    ),
+                    _ClipFrames(media: media, clip: clip, width: clipWidth),
                   // Séparation nette entre clips : après un scindage, les
                   // deux morceaux doivent se lire comme deux éléments.
                   Positioned(
@@ -305,6 +351,38 @@ class EditorTimeline extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  /// Segment de la piste « Son vidéo » aligné sous son clip : forme d'onde
+  /// du son d'origine découpée sur la plage rognée du clip.
+  Widget _positionedClipWave(
+    BuildContext context,
+    Clip clip,
+    double origin,
+    Project project,
+    int clipStart,
+  ) {
+    final media = project.mediaById(clip.mediaId);
+    if (media == null || media.kind != MediaKind.video) {
+      return const SizedBox.shrink();
+    }
+    final px = clip.durationMs / 1000 * _pxPerSec;
+    final clipWidth = math.max(px, 16.0);
+    final left = origin + clipStart / 1000 * _pxPerSec;
+    final missing = media.missing || media.fileMissing;
+    return Positioned(
+      left: left,
+      top: 0,
+      width: clipWidth,
+      height: _nativeAudioTrack,
+      child: missing
+          ? ColoredBox(color: context.grace.surface)
+          : _ClipWaveform(
+              media: media,
+              clip: clip,
+              muted: clip.volume <= 0 || project.videoVolumeValue <= 0,
+            ),
     );
   }
 
@@ -379,6 +457,15 @@ class EditorTimeline extends StatelessWidget {
         excludeSemantics: true,
         child: GestureDetector(
           onTap: () => controller.selectText(text.id),
+          // Glisser déplace le texte dans le temps (aimantation comprise),
+          // comme un élément audio : c'était le geste manquant le plus
+          // visible pour un débutant.
+          onHorizontalDragStart: (_) => controller.beginGesture(),
+          onHorizontalDragUpdate: (details) => controller.moveText(
+            text.id,
+            (details.delta.dx / _pxPerSec * 1000).round(),
+          ),
+          onHorizontalDragEnd: (_) => controller.endGesture(),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final width = constraints.maxWidth;
@@ -416,6 +503,57 @@ class EditorTimeline extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Poignées de durée du texte sélectionné (début et fin), mêmes règles
+  /// que les poignées audio : 14 dp visibles, 48 dp de zone tactile.
+  List<Widget> _textTrimHandles(
+    Project project,
+    double origin,
+    AppLocalizations l10n,
+  ) {
+    if (controller.selection != SelectionType.text) return const [];
+    final text = controller.selectedText;
+    if (text == null) return const [];
+    final left = origin + text.startMs / 1000 * _pxPerSec;
+    final width = math.max(text.durationMs / 1000 * _pxPerSec, 24.0);
+    const visual = GraceDims.trimHandle;
+    const touch = GraceDims.touch;
+    final outside = touch - visual;
+    return [
+      Positioned(
+        left: left - outside,
+        top: 0,
+        width: touch,
+        height: GraceDims.subTrack,
+        child: _TrimHandle(
+          atRight: true,
+          label: l10n.trimHandleStartLabel,
+          onStart: controller.beginGesture,
+          onEnd: controller.endGesture,
+          onDrag: (delta) => controller.resizeText(
+            text.id,
+            leftDeltaMs: (delta / _pxPerSec * 1000).round(),
+          ),
+        ),
+      ),
+      Positioned(
+        left: left + width - visual,
+        top: 0,
+        width: touch,
+        height: GraceDims.subTrack,
+        child: _TrimHandle(
+          atRight: false,
+          label: l10n.trimHandleEndLabel,
+          onStart: controller.beginGesture,
+          onEnd: controller.endGesture,
+          onDrag: (delta) => controller.resizeText(
+            text.id,
+            rightDeltaMs: (delta / _pxPerSec * 1000).round(),
+          ),
+        ),
+      ),
+    ];
   }
 
   Widget _positionedAudio(
@@ -584,23 +722,19 @@ class _PlayheadHead extends StatelessWidget {
   );
 }
 
-/// Décomposition d'un clip, comme dans les éditeurs mobiles courants
-/// (CapCut, VN, iMovie) : la bande d'images au-dessus, la forme d'onde du
-/// son d'origine en dessous, dans la même piste vidéo de 72 dp (EDT-01).
-/// Le débutant voit d'un coup d'œil où sont les images et où est le son,
-/// sans piste supplémentaire à comprendre.
+/// Bande d'images d'un clip. Le son d'origine vit dans la piste séparée
+/// « Son vidéo » juste en dessous : la décomposition images/son se lit
+/// comme deux pistes, comme dans CapCut/VN.
 class _ClipFrames extends StatelessWidget {
   const _ClipFrames({
     required this.media,
     required this.clip,
     required this.width,
-    required this.muted,
   });
 
   final MediaRef? media;
   final Clip clip;
   final double width;
-  final bool muted;
 
   @override
   Widget build(BuildContext context) {
@@ -610,7 +744,7 @@ class _ClipFrames extends StatelessWidget {
     // Une image environ toutes les 64 dp ; le plafond évite d'extraire des
     // dizaines de vignettes pour un clip très long.
     final count = (width / 64).ceil().clamp(1, 16);
-    final strip = Row(
+    return Row(
       children: [
         for (var i = 0; i < count; i++)
           Expanded(
@@ -625,16 +759,6 @@ class _ClipFrames extends StatelessWidget {
               showDuration: false,
             ),
           ),
-      ],
-    );
-    if (media!.kind != MediaKind.video) return strip;
-    return Column(
-      children: [
-        Expanded(child: strip),
-        SizedBox(
-          height: 22,
-          child: _ClipWaveform(media: media!, clip: clip, muted: muted),
-        ),
       ],
     );
   }

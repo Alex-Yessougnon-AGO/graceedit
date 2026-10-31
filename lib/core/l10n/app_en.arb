@@ -136,6 +136,8 @@
   "editorFormat": "Format",
   "editorCover": "Cover",
   "editorSplit": "Split",
+  "editorZoomIn": "Zoom in on the timeline",
+  "editorZoomOut": "Zoom out of the timeline",
   "editorVolume": "Volume",
   "editorCrop": "Frame",
   "editorDelete": "Delete",

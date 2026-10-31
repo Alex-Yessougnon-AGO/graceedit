@@ -620,6 +620,18 @@ abstract class AppLocalizations {
   /// **'Scinder'**
   String get editorSplit;
 
+  /// No description provided for @editorZoomIn.
+  ///
+  /// In fr, this message translates to:
+  /// **'Zoom avant'**
+  String get editorZoomIn;
+
+  /// No description provided for @editorZoomOut.
+  ///
+  /// In fr, this message translates to:
+  /// **'Zoom arrière'**
+  String get editorZoomOut;
+
   /// No description provided for @editorVolume.
   ///
   /// In fr, this message translates to:
@@ -721,18 +733,6 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Réessayer'**
   String get editorRetrySave;
-
-  /// No description provided for @editorZoomIn.
-  ///
-  /// In fr, this message translates to:
-  /// **'Zoom avant'**
-  String get editorZoomIn;
-
-  /// No description provided for @editorZoomOut.
-  ///
-  /// In fr, this message translates to:
-  /// **'Zoom arrière'**
-  String get editorZoomOut;
 
   /// No description provided for @editorClipActions.
   ///

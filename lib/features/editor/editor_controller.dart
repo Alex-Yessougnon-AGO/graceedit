@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/models/project.dart';
 import '../../core/store/app_store.dart';
 import '../../core/theme/tokens.dart';
+import 'snap_engine.dart';
 
 const _uuid = Uuid();
 
@@ -137,7 +139,10 @@ class EditorController extends ChangeNotifier {
         .toDouble();
   }
 
-  static const double _maxZoom = 24;
+  // 96 × 1,2 dp/s ≈ 115 dp/s : assez fin pour rogner à 0,1 s près sur un
+  // clip court. À 24, le zoom d'ouverture d'un clip de 10 s était déjà au
+  // plafond et le bouton « zoomer » restait sans effet.
+  static const double _maxZoom = 96;
 
   /// Ajuste le zoom d'ouverture pour que la timeline reste lisible même avec
   /// une vidéo courte. L'échelle de départ de la fiche (1,2 dp/s) reste le
@@ -361,11 +366,81 @@ class EditorController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------------------------------------------------------- aimantation
+  //
+  // Pendant un glissement, la position « virtuelle » (non aimantée) est
+  // conservée : sans elle, l'élément resterait collé au point d'aimantation
+  // car chaque petit delta repartirait de la position aimantée.
+  String? _dragId;
+  int _dragVirtualMs = 0;
+  int? _lastSnapHit;
+
+  /// Seuil d'aimantation : 8 dp à l'écran, converti en ms selon le zoom.
+  int get _snapThresholdMs =>
+      (8 / (GraceDims.timelinePxPerSec * zoom) * 1000).round();
+
+  List<int> get _snapPoints {
+    final spans = <({int startMs, int endMs})>[];
+    var clipStart = 0;
+    for (final clip in _project.clips) {
+      spans.add((startMs: clipStart, endMs: clipStart + clip.durationMs));
+      clipStart += clip.durationMs;
+    }
+    for (final t in _project.texts) {
+      spans.add((startMs: t.startMs, endMs: t.startMs + t.durationMs));
+    }
+    for (final a in _project.audios) {
+      spans.add((startMs: a.startMs, endMs: a.startMs + a.durationMs));
+    }
+    return snapCandidates(
+      durationMs: durationMs,
+      playheadMs: _positionMs,
+      spans: spans,
+    );
+  }
+
+  /// Aimante [targetMs] et vibre légèrement quand un nouveau point est
+  /// accroché (si le réglage « Retour haptique » est actif).
+  int _snapped(int targetMs) {
+    final outcome = snapValue(targetMs, _snapPoints, _snapThresholdMs);
+    final hit = outcome.hit;
+    if (hit != null && hit != _lastSnapHit && store.settings.haptics) {
+      _safeHaptic(HapticFeedback.selectionClick);
+    }
+    _lastSnapHit = hit;
+    return outcome.value;
+  }
+
+  int _dragTarget(String id, int currentMs, int deltaMs) {
+    if (_dragId != id) {
+      _dragId = id;
+      _dragVirtualMs = currentMs;
+    }
+    _dragVirtualMs = (_dragVirtualMs + deltaMs).clamp(0, durationMs);
+    return _snapped(_dragVirtualMs);
+  }
+
+  void _hapticTap() {
+    if (store.settings.haptics) _safeHaptic(HapticFeedback.mediumImpact);
+  }
+
+  /// L'haptique ne doit jamais faire échouer une action : sans binding
+  /// (tests) ou sans vibreur, l'appel lève ou complète en erreur.
+  static void _safeHaptic(Future<void> Function() action) {
+    try {
+      action().ignore();
+    } catch (_) {
+      // Aucun retour haptique disponible : on continue sans.
+    }
+  }
+
   void beginGesture() {
     _gestureBase ??= _project;
   }
 
   void endGesture() {
+    _dragId = null;
+    _lastSnapHit = null;
     if (_gestureBase == null) return;
     final before = _gestureBase!;
     _gestureBase = null;
@@ -378,6 +453,8 @@ class EditorController extends ChangeNotifier {
   /// Abandonne les modifications faites depuis [beginGesture] (fermeture
   /// d'un panneau par la croix). Aucune entrée d'annulation n'est ajoutée.
   void cancelGesture() {
+    _dragId = null;
+    _lastSnapHit = null;
     final before = _gestureBase;
     if (before == null) return;
     _gestureBase = null;
@@ -495,6 +572,7 @@ class EditorController extends ChangeNotifier {
     _apply(_project.copyWith(clips: clips));
     selection = SelectionType.clip;
     selectedId = left.id;
+    _hapticTap();
     notifyListeners();
     return true;
   }
@@ -648,6 +726,47 @@ class EditorController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Déplace un texte sur la timeline, avec aimantation (tête de lecture,
+  /// bords des éléments, temps ronds). C'était impossible : le texte ne
+  /// répondait qu'au toucher, contrairement aux éléments audio.
+  void moveText(String id, int deltaMs) {
+    final index = _project.texts.indexWhere((t) => t.id == id);
+    if (index < 0) return;
+    final text = _project.texts[index];
+    final start = _dragTarget(id, text.startMs, deltaMs);
+    final texts = [..._project.texts];
+    texts[index] = text.copyWith(startMs: start);
+    _apply(_project.copyWith(texts: texts));
+    selection = SelectionType.text;
+    selectedId = id;
+  }
+
+  /// Règle le début ou la durée d'un texte par ses poignées (500 ms min,
+  /// borné au projet).
+  void resizeText(String id, {int leftDeltaMs = 0, int rightDeltaMs = 0}) {
+    final index = _project.texts.indexWhere((t) => t.id == id);
+    if (index < 0) return;
+    final text = _project.texts[index];
+    var start = text.startMs;
+    var duration = text.durationMs;
+    if (leftDeltaMs != 0) {
+      final delta = leftDeltaMs.clamp(-start, duration - 500);
+      start += delta;
+      duration -= delta;
+    }
+    if (rightDeltaMs != 0) {
+      duration = (duration + rightDeltaMs).clamp(
+        500,
+        (durationMs - start).clamp(500, 1 << 62),
+      );
+    }
+    final texts = [..._project.texts];
+    texts[index] = text.copyWith(startMs: start, durationMs: duration);
+    _apply(_project.copyWith(texts: texts));
+    selection = SelectionType.text;
+    selectedId = id;
+  }
+
   void removeText(String id) {
     _apply(
       _project.copyWith(
@@ -704,15 +823,15 @@ class EditorController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Déplace un élément audio sur la timeline (jamais avant zéro).
+  /// Déplace un élément audio sur la timeline (jamais avant zéro),
+  /// avec la même aimantation que les textes.
   void moveAudio(String id, int deltaMs) {
-    final audios = [
-      for (final a in _project.audios)
-        if (a.id == id)
-          a.copyWith(startMs: (a.startMs + deltaMs).clamp(0, durationMs))
-        else
-          a,
-    ];
+    final index = _project.audios.indexWhere((a) => a.id == id);
+    if (index < 0) return;
+    final audio = _project.audios[index];
+    final start = _dragTarget(id, audio.startMs, deltaMs);
+    final audios = [..._project.audios];
+    audios[index] = audio.copyWith(startMs: start);
     _apply(_project.copyWith(audios: audios));
     selection = SelectionType.audio;
     selectedId = id;

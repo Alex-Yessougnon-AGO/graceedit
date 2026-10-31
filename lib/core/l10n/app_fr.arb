@@ -136,6 +136,8 @@
   "editorFormat": "Format",
   "editorCover": "Couverture",
   "editorSplit": "Scinder",
+  "editorZoomIn": "Zoomer la timeline",
+  "editorZoomOut": "Dézoomer la timeline",
   "editorVolume": "Volume",
   "editorCrop": "Cadrer",
   "editorDelete": "Supprimer",

@@ -310,6 +310,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get editorSplit => 'Scinder';
 
   @override
+  String get editorZoomIn => 'Zoom avant';
+
+  @override
+  String get editorZoomOut => 'Zoom arrière';
+
+  @override
   String get editorVolume => 'Volume';
 
   @override
@@ -360,12 +366,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get editorRetrySave => 'Réessayer';
-
-  @override
-  String get editorZoomIn => 'Zoom avant';
-
-  @override
-  String get editorZoomOut => 'Zoom arrière';
 
   @override
   String get editorClipActions => 'Actions du clip';

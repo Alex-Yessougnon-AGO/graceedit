@@ -129,6 +129,47 @@ void main() {
     });
   });
 
+  group('zoom timeline', () {
+    test('le zoom peut dépasser le niveau d’ouverture (bouton +)', () async {
+      controller = await create();
+      final opening = controller.zoom;
+      controller.setZoom(opening * 1.4);
+      expect(controller.zoom, greaterThan(opening));
+      controller.setZoom(100000);
+      expect(controller.zoom, 96);
+    });
+  });
+
+  group('texte déplaçable (étape 1 timeline)', () {
+    test('glisser déplace le texte sur la timeline', () async {
+      controller = await create();
+      final item = controller.addText();
+      controller.beginGesture();
+      controller.moveText(item.id, 2000);
+      controller.endGesture();
+      expect(controller.project.texts.single.startMs, 2000);
+    });
+
+    test('le déplacement aimante sur les temps ronds (5 s)', () async {
+      controller = await create();
+      final item = controller.addText();
+      controller.beginGesture();
+      controller.moveText(item.id, 4800);
+      controller.endGesture();
+      expect(controller.project.texts.single.startMs, 5000);
+    });
+
+    test('les poignées règlent début et durée (500 ms min)', () async {
+      controller = await create();
+      final item = controller.addText();
+      controller.resizeText(item.id, rightDeltaMs: -10000);
+      expect(controller.project.texts.single.durationMs, 500);
+      controller.resizeText(item.id, leftDeltaMs: 1000);
+      final text = controller.project.texts.single;
+      expect(text.startMs, 0); // durée déjà au minimum : le bord ne bouge pas
+    });
+  });
+
   group('scinder', () {
     test('coupe au milieu en deux clips', () async {
       controller = await create();
