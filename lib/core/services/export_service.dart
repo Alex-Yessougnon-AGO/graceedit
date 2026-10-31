@@ -124,7 +124,9 @@ class ExportService {
         'startMs': audio.startMs,
         'trimStartMs': audio.trimStartMs,
         'trimEndMs': audio.trimEndMs,
-        'volume': (audio.volume / 100).clamp(0.0, 1.0),
+        'volume': project.musicMuted
+            ? 0.0
+            : (audio.volume / 100).clamp(0.0, 1.0),
         'fadeInMs': audio.fadeInMs,
         'fadeOutMs': audio.fadeOutMs,
       });

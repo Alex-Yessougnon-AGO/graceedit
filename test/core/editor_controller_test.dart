@@ -140,6 +140,27 @@ void main() {
     });
   });
 
+  group('détacher l’audio (phase 2)', () {
+    test('crée un élément audio aligné et coupe le son du clip', () async {
+      controller = await create();
+      final item = controller.detachAudio('c1');
+      expect(item, isNotNull);
+      expect(item!.startMs, 0);
+      expect(item.trimStartMs, 0);
+      expect(item.trimEndMs, 10000);
+      expect(controller.project.audios, hasLength(1));
+      expect(controller.project.clips.single.volume, 0);
+      expect(controller.selection, SelectionType.audio);
+      expect(controller.selectedId, item.id);
+    });
+
+    test('un clip inconnu ne détache rien', () async {
+      controller = await create();
+      expect(controller.detachAudio('absent'), isNull);
+      expect(controller.project.audios, isEmpty);
+    });
+  });
+
   group('texte déplaçable (étape 1 timeline)', () {
     test('glisser déplace le texte sur la timeline', () async {
       controller = await create();

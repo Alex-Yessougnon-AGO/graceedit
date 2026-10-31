@@ -636,6 +636,14 @@ class EditorController extends ChangeNotifier {
     _apply(_project.copyWith(media: next), undoable: false);
   }
 
+  /// Coupe ou rétablit toute la piste Musique (les volumes individuels
+  /// des éléments ne sont pas touchés).
+  void setMusicMuted(bool muted) {
+    if (_project.musicMuted == muted) return;
+    _apply(_project.copyWith(musicMuted: muted));
+    notifyListeners();
+  }
+
   void setVideoVolume(double value) {
     _apply(_project.copyWith(videoVolume: value.clamp(0, 100)));
   }
@@ -910,6 +918,34 @@ class EditorController extends ChangeNotifier {
     selection = SelectionType.audio;
     selectedId = copy.id;
     notifyListeners();
+  }
+
+  /// Détache le son d'un clip vidéo (Phase 2, geste standard CapCut) :
+  /// crée un élément audio autonome aligné sur le clip, avec sa plage
+  /// rognée et son volume, et coupe le son du clip. L'élément détaché se
+  /// déplace, se rogne et s'exporte comme une musique (le natif extrait
+  /// la piste audio du fichier vidéo, l'aperçu la joue de même).
+  AudioItem? detachAudio(String clipId) {
+    final index = _project.clips.indexWhere((c) => c.id == clipId);
+    if (index < 0) return null;
+    final clip = _project.clips[index];
+    final media = _project.mediaById(clip.mediaId);
+    if (media == null || media.kind != MediaKind.video) return null;
+    final item = AudioItem(
+      id: _uuid.v4(),
+      mediaId: clip.mediaId,
+      startMs: clipStartMs(clip),
+      trimStartMs: clip.trimStartMs,
+      trimEndMs: clip.trimEndMs,
+      volume: clip.volume,
+    );
+    final clips = [..._project.clips];
+    clips[index] = clip.copyWith(volume: 0);
+    _apply(_project.copyWith(clips: clips, audios: [..._project.audios, item]));
+    selection = SelectionType.audio;
+    selectedId = item.id;
+    notifyListeners();
+    return item;
   }
 
   void removeAudio(String id) {

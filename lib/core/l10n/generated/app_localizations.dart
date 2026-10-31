@@ -2696,6 +2696,18 @@ abstract class AppLocalizations {
   /// **'Dupliquer le clip'**
   String get editorDuplicateClip;
 
+  /// No description provided for @editorDetachAudio.
+  ///
+  /// In fr, this message translates to:
+  /// **'Détacher l’audio'**
+  String get editorDetachAudio;
+
+  /// No description provided for @toastAudioDetached.
+  ///
+  /// In fr, this message translates to:
+  /// **'Audio détaché · le son du clip est coupé'**
+  String get toastAudioDetached;
+
   /// No description provided for @editorAddToTimeline.
   ///
   /// In fr, this message translates to:

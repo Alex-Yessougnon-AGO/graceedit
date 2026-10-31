@@ -58,6 +58,30 @@ class EditorTimeline extends StatelessWidget {
             : width / 2;
         final hasTexts = project.texts.isNotEmpty;
         final hasAudio = project.audios.isNotEmpty;
+        // Empilement automatique (Phase 2) : deux éléments qui se
+        // chevauchent dans le temps occupent deux sous-pistes, comme dans
+        // les éditeurs multi-pistes, sans que l'utilisateur ait à gérer
+        // des pistes à la main.
+        final textLaneMap = _laneOf([
+          for (final t in project.texts)
+            (id: t.id, startMs: t.startMs, endMs: t.startMs + t.durationMs),
+        ]);
+        final audioLaneMap = _laneOf([
+          for (final a in project.audios)
+            (id: a.id, startMs: a.startMs, endMs: a.startMs + a.durationMs),
+        ]);
+        final textLanes = hasTexts
+            ? textLaneMap.values.reduce(math.max) + 1
+            : 0;
+        final audioLanes = hasAudio
+            ? audioLaneMap.values.reduce(math.max) + 1
+            : 0;
+        final textHeight = textLanes == 0
+            ? 0.0
+            : textLanes * GraceDims.subTrack + (textLanes - 1) * 4;
+        final audioHeight = audioLanes == 0
+            ? 0.0
+            : audioLanes * GraceDims.subTrack + (audioLanes - 1) * 4;
         // Piste « Son vidéo » : présente dès qu'un clip vidéo existe. Ses
         // segments restent alignés sous les clips (mêmes positions), le
         // son suit donc le rognage et le scindage sans état supplémentaire.
@@ -71,14 +95,14 @@ class EditorTimeline extends StatelessWidget {
         final nativeTop = top;
         if (hasNativeAudio) top += _nativeAudioTrack + 8;
         final textTop = top;
-        if (hasTexts) top += GraceDims.subTrack + 8;
+        if (hasTexts) top += textHeight + 8;
         final audioTop = top;
         // La tête de lecture s'arrête au bas de la dernière voie : elle ne
         // traverse pas la zone vide de la timeline (maquette EDT-01).
         var contentBottom = videoTop + GraceDims.videoTrack;
         if (hasNativeAudio) contentBottom = nativeTop + _nativeAudioTrack;
-        if (hasTexts) contentBottom = textTop + GraceDims.subTrack;
-        if (hasAudio) contentBottom = audioTop + GraceDims.subTrack;
+        if (hasTexts) contentBottom = textTop + textHeight;
+        if (hasAudio) contentBottom = audioTop + audioHeight;
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -172,15 +196,29 @@ class EditorTimeline extends StatelessWidget {
                     left: 0,
                     right: 0,
                     top: textTop,
-                    height: GraceDims.subTrack,
+                    height: textHeight,
                     child: ClipRect(
                       child: Stack(
                         clipBehavior: ui.Clip.hardEdge,
                         children: [
                           for (final text in project.texts)
-                            _positionedText(context, text, origin),
+                            _positionedText(
+                              context,
+                              text,
+                              origin,
+                              top:
+                                  (textLaneMap[text.id] ?? 0) *
+                                  (GraceDims.subTrack + 4),
+                            ),
                           // Poignées de durée du texte sélectionné.
-                          ..._textTrimHandles(project, origin, l10n),
+                          ..._textTrimHandles(
+                            project,
+                            origin,
+                            l10n,
+                            top:
+                                (textLaneMap[controller.selectedId] ?? 0) *
+                                (GraceDims.subTrack + 4),
+                          ),
                         ],
                       ),
                     ),
@@ -190,14 +228,29 @@ class EditorTimeline extends StatelessWidget {
                     left: 0,
                     right: 0,
                     top: audioTop,
-                    height: GraceDims.subTrack,
+                    height: audioHeight,
                     child: ClipRect(
                       child: Stack(
                         clipBehavior: ui.Clip.hardEdge,
                         children: [
                           for (final audio in project.audios)
-                            _positionedAudio(context, audio, origin, project),
-                          ..._audioTrimHandles(project, origin, l10n),
+                            _positionedAudio(
+                              context,
+                              audio,
+                              origin,
+                              project,
+                              top:
+                                  (audioLaneMap[audio.id] ?? 0) *
+                                  (GraceDims.subTrack + 4),
+                            ),
+                          ..._audioTrimHandles(
+                            project,
+                            origin,
+                            l10n,
+                            top:
+                                (audioLaneMap[controller.selectedId] ?? 0) *
+                                (GraceDims.subTrack + 4),
+                          ),
                         ],
                       ),
                     ),
@@ -228,6 +281,28 @@ class EditorTimeline extends StatelessWidget {
         );
       },
     );
+  }
+
+  /// Attribution des sous-pistes par chevauchement (partitionnement
+  /// d'intervalles glouton) : chaque élément prend la première piste dont
+  /// le dernier élément se termine avant son début.
+  static Map<String, int> _laneOf(
+    List<({String id, int startMs, int endMs})> spans,
+  ) {
+    final sorted = [...spans]..sort((a, b) => a.startMs.compareTo(b.startMs));
+    final laneEnds = <int>[];
+    final lanes = <String, int>{};
+    for (final span in sorted) {
+      var lane = laneEnds.indexWhere((end) => end <= span.startMs);
+      if (lane < 0) {
+        laneEnds.add(span.endMs);
+        lane = laneEnds.length - 1;
+      } else {
+        laneEnds[lane] = span.endMs;
+      }
+      lanes[span.id] = lane;
+    }
+    return lanes;
   }
 
   Map<String, int> _durations(Project project) {
@@ -438,7 +513,12 @@ class EditorTimeline extends StatelessWidget {
     ];
   }
 
-  Widget _positionedText(BuildContext context, TextItem text, double origin) {
+  Widget _positionedText(
+    BuildContext context,
+    TextItem text,
+    double origin, {
+    double top = 0,
+  }) {
     final px = text.durationMs / 1000 * _pxPerSec;
     final left = origin + text.startMs / 1000 * _pxPerSec;
     final selected =
@@ -447,7 +527,7 @@ class EditorTimeline extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return Positioned(
       left: left,
-      top: 0,
+      top: top,
       width: math.max(px, 24),
       height: GraceDims.subTrack,
       child: Semantics(
@@ -510,8 +590,9 @@ class EditorTimeline extends StatelessWidget {
   List<Widget> _textTrimHandles(
     Project project,
     double origin,
-    AppLocalizations l10n,
-  ) {
+    AppLocalizations l10n, {
+    double top = 0,
+  }) {
     if (controller.selection != SelectionType.text) return const [];
     final text = controller.selectedText;
     if (text == null) return const [];
@@ -523,7 +604,7 @@ class EditorTimeline extends StatelessWidget {
     return [
       Positioned(
         left: left - outside,
-        top: 0,
+        top: top,
         width: touch,
         height: GraceDims.subTrack,
         child: _TrimHandle(
@@ -539,7 +620,7 @@ class EditorTimeline extends StatelessWidget {
       ),
       Positioned(
         left: left + width - visual,
-        top: 0,
+        top: top,
         width: touch,
         height: GraceDims.subTrack,
         child: _TrimHandle(
@@ -560,8 +641,9 @@ class EditorTimeline extends StatelessWidget {
     BuildContext context,
     AudioItem audio,
     double origin,
-    Project project,
-  ) {
+    Project project, {
+    double top = 0,
+  }) {
     final px = audio.durationMs / 1000 * _pxPerSec;
     final left = origin + audio.startMs / 1000 * _pxPerSec;
     final selected =
@@ -571,7 +653,7 @@ class EditorTimeline extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return Positioned(
       left: left,
-      top: 0,
+      top: top,
       width: math.max(px, 24),
       height: GraceDims.subTrack,
       child: Semantics(
@@ -659,8 +741,9 @@ class EditorTimeline extends StatelessWidget {
   List<Widget> _audioTrimHandles(
     Project project,
     double origin,
-    AppLocalizations l10n,
-  ) {
+    AppLocalizations l10n, {
+    double top = 0,
+  }) {
     if (controller.selection != SelectionType.audio) return const [];
     final audio = controller.selectedAudio;
     if (audio == null) return const [];
@@ -674,7 +757,7 @@ class EditorTimeline extends StatelessWidget {
     return [
       Positioned(
         left: left - outside,
-        top: 0,
+        top: top,
         width: touch,
         height: GraceDims.subTrack,
         child: _TrimHandle(
@@ -690,7 +773,7 @@ class EditorTimeline extends StatelessWidget {
       ),
       Positioned(
         left: left + width - visual,
-        top: 0,
+        top: top,
         width: touch,
         height: GraceDims.subTrack,
         child: _TrimHandle(

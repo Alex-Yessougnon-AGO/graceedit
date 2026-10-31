@@ -508,6 +508,7 @@ class Project {
     this.texts = const [],
     this.audios = const [],
     this.videoVolume = 100,
+    this.musicMuted = false,
     this.coverSource = CoverSource.automatic,
     this.coverTimeMs = 0,
     this.coverPath,
@@ -530,6 +531,10 @@ class Project {
   final List<TextItem> texts;
   final List<AudioItem> audios;
   final double videoVolume;
+
+  /// Piste Musique coupée d'un geste (Phase 2) : les volumes individuels
+  /// des éléments sont conservés, seul le rendu est mis à zéro.
+  final bool musicMuted;
   final CoverSource coverSource;
   final int coverTimeMs;
   final String? coverPath;
@@ -593,6 +598,7 @@ class Project {
     List<TextItem>? texts,
     List<AudioItem>? audios,
     double? videoVolume,
+    bool? musicMuted,
     CoverSource? coverSource,
     int? coverTimeMs,
     String? coverPath,
@@ -615,6 +621,7 @@ class Project {
     texts: texts ?? this.texts,
     audios: audios ?? this.audios,
     videoVolume: videoVolume ?? this.videoVolume,
+    musicMuted: musicMuted ?? this.musicMuted,
     coverSource: coverSource ?? this.coverSource,
     coverTimeMs: coverTimeMs ?? this.coverTimeMs,
     coverPath: coverPath ?? this.coverPath,
@@ -638,6 +645,7 @@ class Project {
     'texts': texts.map((t) => t.toJson()).toList(),
     'audios': audios.map((a) => a.toJson()).toList(),
     'videoVolume': videoVolume,
+    'musicMuted': musicMuted,
     'coverSource': coverSource.name,
     'coverTimeMs': coverTimeMs,
     'coverPath': coverPath,
@@ -671,6 +679,7 @@ class Project {
       texts: list('texts', TextItem.fromJson),
       audios: list('audios', AudioItem.fromJson),
       videoVolume: (json['videoVolume'] as num?)?.toDouble() ?? 100,
+      musicMuted: json['musicMuted'] == true,
       coverSource: CoverSource.fromKey(json['coverSource'] as String?),
       coverTimeMs: (json['coverTimeMs'] as num?)?.toInt() ?? 0,
       coverPath: json['coverPath'] as String?,

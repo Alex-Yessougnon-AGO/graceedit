@@ -573,7 +573,27 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
                   },
                 ),
                 const SizedBox(height: 12),
-                Text(l10n.audioMusic, style: GraceType.body),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(l10n.audioMusic, style: GraceType.body),
+                    ),
+                    // Mute de piste : coupe toutes les musiques d'un geste,
+                    // sans toucher à leurs volumes individuels.
+                    GraceIconAction(
+                      icon: project.musicMuted
+                          ? Icons.volume_off
+                          : Icons.volume_up,
+                      semanticLabel: project.musicMuted
+                          ? l10n.audioUnmute
+                          : l10n.audioMute,
+                      onPressed: () {
+                        controller.setMusicMuted(!project.musicMuted);
+                        setSheetState(() {});
+                      },
+                    ),
+                  ],
+                ),
                 for (final audio in project.audios) ...[
                   Row(
                     children: [
@@ -1309,6 +1329,23 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 _showTrim();
+              },
+            ),
+            // Phase 2 : le son devient un élément audio autonome, le son
+            // du clip est coupé (réversible par Annuler).
+            ListTile(
+              leading: const Icon(Icons.music_note_outlined),
+              title: Text(l10n.editorDetachAudio),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                if (controller.detachAudio(clip.id) != null) {
+                  GraceToast.show(
+                    context,
+                    l10n.toastAudioDetached,
+                    actionLabel: l10n.actionUndo,
+                    onAction: controller.undo,
+                  );
+                }
               },
             ),
             ListTile(

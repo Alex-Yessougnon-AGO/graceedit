@@ -59,7 +59,9 @@ class PreviewAudioEngine {
         }
         await track.playFrom(
           Duration(milliseconds: local + audio.trimStartMs),
-          gainFor(audio, local),
+          // Piste Musique coupée : on continue de suivre la position en
+          // silence pour rester synchronisé à la réactivation.
+          project.musicMuted ? 0 : gainFor(audio, local),
         );
       }
     } finally {

@@ -1479,6 +1479,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorDuplicateClip => 'Duplicate clip';
 
   @override
+  String get editorDetachAudio => 'Detach audio';
+
+  @override
+  String get toastAudioDetached => 'Audio detached · clip sound is muted';
+
+  @override
   String get editorAddToTimeline => 'Add to timeline';
 
   @override

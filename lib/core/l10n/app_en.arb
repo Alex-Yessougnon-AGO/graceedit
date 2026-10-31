@@ -637,6 +637,8 @@
   "editorSelectClipFirst": "Select a clip on the timeline first.",
   "editorPreciseTrim": "Trim precisely",
   "editorDuplicateClip": "Duplicate clip",
+  "editorDetachAudio": "Detach audio",
+  "toastAudioDetached": "Audio detached · clip sound is muted",
   "editorAddToTimeline": "Add to timeline",
   "editorRemoveClip": "Remove this clip",
   "editorSavedAt": "Auto-save",
