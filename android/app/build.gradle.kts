@@ -4,10 +4,35 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Signature de production : les identifiants viennent de l'environnement
+// (secrets GitHub en CI, variables locales sinon) — jamais du dépôt.
+// Sans eux, le build release retombe sur la clé debug pour rester lançable.
+val releaseStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+val releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+val releaseStoreFile = System.getenv("ANDROID_KEYSTORE_FILE")
+val hasReleaseSigning = listOf(
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+    releaseStoreFile,
+).all { !it.isNullOrBlank() } && file(releaseStoreFile ?: "").exists()
+
 android {
     namespace = "com.graceedit.graceedit"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -31,9 +56,13 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Signé avec le keystore de production quand ses identifiants
+            // sont fournis (CI), sinon avec la clé debug en local.
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

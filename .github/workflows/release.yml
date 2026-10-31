@@ -19,7 +19,21 @@ jobs:
       - run: dart format --set-exit-if-changed lib test
       - run: flutter analyze --no-pub
       - run: flutter test
-      - run: flutter build apk --release
+      # Signature de production : keystore reconstruit depuis les secrets,
+      # jamais présent dans le dépôt. Toutes les releases signées ainsi
+      # partagent la même signature : les mises à jour s'installent par
+      # dessus les versions précédentes.
+      - name: Préparer la signature release
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/graceedit-release.jks"
+      - name: Construire l'APK signé
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/graceedit-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: flutter build apk --release
       - uses: softprops/action-gh-release@v2
         with:
           files: build/app/outputs/flutter-apk/app-release.apk
