@@ -59,3 +59,5 @@ cookies.json
 # Signature Android (jamais dans le dépôt)
 *.jks
 key.properties
+config.bat
+node_modules
