@@ -357,10 +357,14 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
                                                   color: p.error,
                                                 ),
                                                 const SizedBox(width: 4),
-                                                Text(
-                                                  l10n.trashPurgeTomorrow,
-                                                  style: GraceType.secondary
-                                                      .copyWith(color: p.error),
+                                                Expanded(
+                                                  child: Text(
+                                                    l10n.trashPurgeTomorrow,
+                                                    style: GraceType.secondary
+                                                        .copyWith(
+                                                          color: p.error,
+                                                        ),
+                                                  ),
                                                 ),
                                               ],
                                             )

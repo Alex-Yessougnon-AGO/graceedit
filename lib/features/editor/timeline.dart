@@ -50,12 +50,16 @@ class EditorTimeline extends StatelessWidget {
         // moitié gauche vide et la fin du clip hors de l'écran.
         final contentWidth = project.durationMs / 1000 * _pxPerSec;
         final fits = contentWidth <= width;
+        // Centre de la vue : la tête de lecture, décalée par le panoramique
+        // (glisser sur la règle) quand on a zoomé. En lecture, la vue suit
+        // toujours la tête.
+        final centerMs = controller.isPlaying
+            ? controller.positionMs
+            : controller.positionMs + controller.panMs;
         final origin = fits
             ? (width - contentWidth) / 2
-            : width / 2 - controller.positionMs / 1000 * _pxPerSec;
-        final playheadX = fits
-            ? origin + controller.positionMs / 1000 * _pxPerSec
-            : width / 2;
+            : width / 2 - centerMs / 1000 * _pxPerSec;
+        final playheadX = origin + controller.positionMs / 1000 * _pxPerSec;
         final hasTexts = project.texts.isNotEmpty;
         final hasAudio = project.audios.isNotEmpty;
         // Empilement automatique (Phase 2) : deux éléments qui se
@@ -108,15 +112,26 @@ class EditorTimeline extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: controller.clearSelection,
           onScaleStart: (details) {
-            if (details.pointerCount > 1) controller.beginPinch();
+            if (details.pointerCount > 1) {
+              controller.beginPinch();
+            } else {
+              // Glisser depuis la règle = défilement horizontal des
+              // pistes (la tête ne bouge pas) ; depuis les pistes = scrub.
+              controller.beginTimelineDrag(
+                fromRuler: details.localFocalPoint.dy <= GraceDims.ruler + 4,
+              );
+            }
           },
-          onScaleEnd: (_) => controller.endPinch(),
+          onScaleEnd: (_) {
+            controller.endPinch();
+            controller.endTimelineDrag();
+          },
           onScaleUpdate: (details) {
             if (details.pointerCount > 1) {
               // `details.scale` est cumulatif depuis le début du geste.
               controller.updatePinch(details.scale);
             } else if (details.focalPointDelta.dx.abs() > 0.1) {
-              controller.scrubBy(
+              controller.panOrScrubBy(
                 (-details.focalPointDelta.dx / _pxPerSec * 1000).round(),
               );
             }
@@ -895,7 +910,9 @@ class _ClipFrames extends StatelessWidget {
       return ColoredBox(color: context.grace.surface);
     }
     // Une image environ toutes les 64 dp ; le plafond évite d'extraire des
-    // dizaines de vignettes pour un clip très long.
+    // dizaines de vignettes pour un clip très long. Les temps demandés
+    // sont arrondis à la seconde : en zoomant, la plupart des vignettes
+    // sont déjà en cache au lieu d'être ré-extraites (trou noir).
     final count = (width / 64).ceil().clamp(1, 16);
     return Row(
       children: [
@@ -904,8 +921,13 @@ class _ClipFrames extends StatelessWidget {
             child: GraceThumb(
               media: media,
               timeMs:
-                  clip.trimStartMs +
-                  (clip.durationMs * (i + 0.5) / count).round(),
+                  (((clip.trimStartMs +
+                                  (clip.durationMs * (i + 0.5) / count)
+                                      .round()) +
+                              500) ~/
+                          1000 *
+                          1000)
+                      .clamp(clip.trimStartMs, clip.trimEndMs),
               width: width / count,
               height: GraceDims.videoTrack,
               radius: 0,

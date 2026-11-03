@@ -279,7 +279,9 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           focus ??= FocusNode();
-          return Padding(
+          // Défilant : quand le clavier monte, la feuille se réduit et le
+          // contenu fixe débordait (barres d'erreur d'espacement).
+          return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -338,7 +340,14 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
                         icon: Icons.delete_outline,
                         semanticLabel: l10n.actionDelete,
                         onPressed: () {
-                          controller.removeText(item.id);
+                          if (!controller.removeText(item.id)) {
+                            GraceToast.show(
+                              context,
+                              l10n.trackLockedMessage,
+                              isError: true,
+                            );
+                            return;
+                          }
                           Navigator.of(sheetContext).pop(false);
                         },
                       ),
@@ -960,6 +969,106 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
     );
   }
 
+  /// Transition « Fondu » à l'entrée du clip sélectionné : quatre choix,
+  /// appliqués en direct (aperçu et export).
+  Future<void> _showTransition() async {
+    final l10n = AppLocalizations.of(context);
+    final clip = controller.selectedClip;
+    if (clip == null) return;
+    await showGraceSheet<void>(
+      context: context,
+      editorPanel: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final current = controller.selectedClip ?? clip;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.editorTransition, style: GraceType.sheetTitle),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final entry in [
+                      (0, false, l10n.transitionNone),
+                      (500, false, '${l10n.transitionFadeBlack} · 0,5 s'),
+                      (1000, false, '${l10n.transitionFadeBlack} · 1 s'),
+                      (500, true, '${l10n.transitionFadeWhite} · 0,5 s'),
+                      (1000, true, '${l10n.transitionFadeWhite} · 1 s'),
+                    ])
+                      ChoiceChip(
+                        label: Text(entry.$3),
+                        selected:
+                            current.transitionInMs == entry.$1 &&
+                            current.transitionWhite == entry.$2,
+                        onSelected: (_) {
+                          controller.setClipTransition(
+                            current.id,
+                            entry.$1,
+                            white: entry.$2,
+                          );
+                          setSheetState(() {});
+                        },
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Effet de zoom animé (Ken Burns) du clip sélectionné.
+  Future<void> _showZoomEffect() async {
+    final l10n = AppLocalizations.of(context);
+    final clip = controller.selectedClip;
+    if (clip == null) return;
+    await showGraceSheet<void>(
+      context: context,
+      editorPanel: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final current = controller.selectedClip ?? clip;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.editorZoomEffect, style: GraceType.sheetTitle),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final entry in [
+                      ('none', l10n.zoomNone),
+                      ('in', l10n.zoomIn),
+                      ('out', l10n.zoomOut),
+                    ])
+                      ChoiceChip(
+                        label: Text(entry.$2),
+                        selected: current.zoomEffect == entry.$1,
+                        onSelected: (_) {
+                          controller.setClipZoomEffect(current.id, entry.$1);
+                          setSheetState(() {});
+                        },
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   /// Mini-guide des gestes pour débutants : affiché une fois à la première
   /// ouverture de l'éditeur, puis toujours accessible par le bouton « ? ».
   Future<void> _showGuide() async {
@@ -975,6 +1084,11 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
             Text(l10n.guideTitle, style: GraceType.sheetTitle),
             const SizedBox(height: 8),
             Text(l10n.guideIntro, style: GraceType.body),
+            const SizedBox(height: 16),
+            // Démonstration animée : la tête de lecture avance, le clip se
+            // scinde, le texte glisse à sa place. On montre les gestes
+            // au lieu de seulement les décrire.
+            const _GuideDemo(),
             const SizedBox(height: 16),
             for (final tip in [
               (Icons.play_circle_outline, l10n.guidePlay),
@@ -1468,6 +1582,22 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
                 _showTrim();
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.gradient),
+              title: Text(l10n.editorTransition),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _showTransition();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.zoom_in),
+              title: Text(l10n.editorZoomEffect),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _showZoomEffect();
+              },
+            ),
             // Phase 2 : le son devient un élément audio autonome, le son
             // du clip est coupé (réversible par Annuler).
             ListTile(
@@ -1575,7 +1705,10 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
         onAction: controller.undo,
       );
     } else if (controller.selectedText != null) {
-      controller.removeText(controller.selectedText!.id);
+      if (!controller.removeText(controller.selectedText!.id)) {
+        GraceToast.show(context, l10n.trackLockedMessage, isError: true);
+        return;
+      }
       GraceToast.show(
         context,
         l10n.toastTextDeleted,
@@ -1583,7 +1716,10 @@ class _EditorScreenState extends ConsumerState<EditorScreen>
         onAction: controller.undo,
       );
     } else if (controller.selectedAudio != null) {
-      controller.removeAudio(controller.selectedAudio!.id);
+      if (!controller.removeAudio(controller.selectedAudio!.id)) {
+        GraceToast.show(context, l10n.trackLockedMessage, isError: true);
+        return;
+      }
       GraceToast.show(
         context,
         l10n.toastAudioDeleted,
@@ -1617,14 +1753,8 @@ class _PortraitBody extends StatelessWidget {
           controller: controller,
           onEditText: onEditText,
           onMoveTextStart: controller.beginGesture,
-          onMoveText: (text, fractionX, fractionY) {
-            controller.updateText(
-              text.copyWith(
-                x: (text.x + fractionX).clamp(0.05, 0.95),
-                y: (text.y + fractionY).clamp(0.05, 0.95),
-              ),
-            );
-          },
+          onMoveText: (text, fractionX, fractionY) =>
+              controller.moveTextOnPreview(text.id, fractionX, fractionY),
           onMoveTextEnd: controller.endGesture,
           onReconnect: onReconnect,
         ),
@@ -1671,13 +1801,8 @@ class _LandscapeBody extends StatelessWidget {
                     controller: controller,
                     onEditText: onEditText,
                     onMoveTextStart: controller.beginGesture,
-                    onMoveText: (text, fractionX, fractionY) =>
-                        controller.updateText(
-                          text.copyWith(
-                            x: (text.x + fractionX).clamp(0.05, 0.95),
-                            y: (text.y + fractionY).clamp(0.05, 0.95),
-                          ),
-                        ),
+                    onMoveText: (text, fractionX, fractionY) => controller
+                        .moveTextOnPreview(text.id, fractionX, fractionY),
                     onMoveTextEnd: controller.endGesture,
                     onReconnect: onReconnect,
                   ),
@@ -2295,17 +2420,37 @@ class _CropSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = controller.mediaFor(value);
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (media != null)
-          GraceThumb(
+    // Les transformations du clip sont appliquées ici même, en direct :
+    // avant, la surface n'affichait que l'image brute et il fallait
+    // quitter l'écran pour voir le résultat du cadrage.
+    Widget content = media == null
+        ? const SizedBox.expand()
+        : GraceThumb(
             media: media,
             width: 1000,
             height: 1000,
             timeMs: value.trimStartMs,
             showDuration: false,
-          ),
+          );
+    if (value.rotation != 0) {
+      content = RotatedBox(
+        quarterTurns: (value.rotation / 90).round(),
+        child: content,
+      );
+    }
+    if (value.mirrored) {
+      content = Transform.flip(flipX: true, child: content);
+    }
+    if (value.straighten != 0) {
+      content = Transform.rotate(
+        angle: value.straighten * 3.1415926535 / 180,
+        child: content,
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        content,
         IgnorePointer(child: CustomPaint(painter: _ThirdGridPainter())),
         Container(
           decoration: BoxDecoration(
@@ -2492,4 +2637,161 @@ class _ThirdGridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ThirdGridPainter oldDelegate) => false;
+}
+
+/// Démonstration animée du tutoriel : un faux éditeur miniature où la
+/// tête de lecture avance, le clip se scinde en deux, puis un texte
+/// glisse et s'aimante. Boucle de 7 secondes, aucun média réel.
+class _GuideDemo extends StatefulWidget {
+  const _GuideDemo();
+
+  @override
+  State<_GuideDemo> createState() => _GuideDemoState();
+}
+
+class _GuideDemoState extends State<_GuideDemo>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 7),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.grace;
+    return Container(
+      height: 148,
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: AnimatedBuilder(
+        animation: _anim,
+        builder: (context, _) {
+          final t = _anim.value;
+          // Phase 1 (0–35 %) : la tête de lecture traverse le clip.
+          // Phase 2 (35–50 %) : le clip se scinde (écart qui s'ouvre).
+          // Phase 3 (50–80 %) : le texte glisse et s'aimante au centre.
+          final playhead = t < 0.35
+              ? t / 0.35
+              : (t < 0.5 ? 1.0 : (t - 0.5) / 0.5);
+          final gap = t < 0.35 ? 0.0 : ((t - 0.35) / 0.15).clamp(0.0, 1.0) * 10;
+          final textSlide = t < 0.5 ? 0.0 : ((t - 0.5) / 0.3).clamp(0.0, 1.0);
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              return Stack(
+                children: [
+                  // Aperçu miniature.
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 64,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: GraceColors.preview,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // Fausse image vidéo : bandes colorées comme
+                          // dans une mire, pour que la maquette se lise
+                          // comme un vrai aperçu.
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final color in [
+                                Colors.red,
+                                Colors.green,
+                                Colors.yellow,
+                                Colors.blue,
+                                Colors.pink,
+                                Colors.cyan,
+                              ])
+                                Expanded(
+                                  child: ColoredBox(
+                                    color: color.withValues(alpha: 0.75),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          Center(
+                            child: Opacity(
+                              opacity: textSlide,
+                              child: Transform.translate(
+                                offset: Offset((1 - textSlide) * -60, 0),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.55),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'Titre',
+                                    style: TextStyle(
+                                      color: GraceColors.ivory,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Clips de la timeline miniature.
+                  Positioned(
+                    top: 84,
+                    left: 0,
+                    width: width * 0.48 - gap / 2,
+                    height: 26,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: GraceColors.accent,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 84,
+                    left: width * 0.48 + gap / 2,
+                    width: width * 0.48,
+                    height: 26,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: p.outline,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  // Tête de lecture.
+                  Positioned(
+                    top: 76,
+                    left: (playhead * (width - 2)).clamp(0, width - 2),
+                    width: 2,
+                    height: 44,
+                    child: Container(color: GraceColors.accent),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
 }
