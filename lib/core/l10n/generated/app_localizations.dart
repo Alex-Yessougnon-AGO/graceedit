@@ -2726,11 +2726,89 @@ abstract class AppLocalizations {
   /// **'Vitesse'**
   String get editorSpeed;
 
+  /// No description provided for @editorTransition.
+  ///
+  /// In fr, this message translates to:
+  /// **'Transition (fondu)'**
+  String get editorTransition;
+
+  /// No description provided for @transitionNone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucune'**
+  String get transitionNone;
+
+  /// No description provided for @transitionFadeBlack.
+  ///
+  /// In fr, this message translates to:
+  /// **'Fondu noir'**
+  String get transitionFadeBlack;
+
+  /// No description provided for @transitionFadeWhite.
+  ///
+  /// In fr, this message translates to:
+  /// **'Fondu blanc'**
+  String get transitionFadeWhite;
+
+  /// No description provided for @editorZoomEffect.
+  ///
+  /// In fr, this message translates to:
+  /// **'Effet zoom'**
+  String get editorZoomEffect;
+
+  /// No description provided for @zoomNone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun'**
+  String get zoomNone;
+
+  /// No description provided for @zoomIn.
+  ///
+  /// In fr, this message translates to:
+  /// **'Zoom avant'**
+  String get zoomIn;
+
+  /// No description provided for @zoomOut.
+  ///
+  /// In fr, this message translates to:
+  /// **'Zoom arrière'**
+  String get zoomOut;
+
   /// No description provided for @editorLockTrack.
   ///
   /// In fr, this message translates to:
   /// **'Verrouiller la piste'**
   String get editorLockTrack;
+
+  /// No description provided for @trackLockedMessage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Piste verrouillée — touchez le cadenas de la piste pour la déverrouiller.'**
+  String get trackLockedMessage;
+
+  /// No description provided for @notifExportDoneTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Vidéo prête'**
+  String get notifExportDoneTitle;
+
+  /// No description provided for @notifExportDoneBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Votre vidéo est enregistrée dans la galerie.'**
+  String get notifExportDoneBody;
+
+  /// No description provided for @notifExportFailedTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Export non terminé'**
+  String get notifExportFailedTitle;
+
+  /// No description provided for @notifExportFailedBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ouvrez GraceEdit pour voir ce qui s’est passé et réessayer.'**
+  String get notifExportFailedBody;
 
   /// No description provided for @editorUnlockTrack.
   ///

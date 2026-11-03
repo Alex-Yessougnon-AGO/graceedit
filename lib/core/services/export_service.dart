@@ -81,7 +81,8 @@ class ExportService {
       throw ExportException('unsupported_platform');
     }
     final clips = <Map<String, Object>>[];
-    for (final clip in project.clips) {
+    for (var i = 0; i < project.clips.length; i++) {
+      final clip = project.clips[i];
       final media = project.mediaById(clip.mediaId);
       if (media == null || media.fileMissing) {
         throw ExportException('missing_media');
@@ -92,6 +93,16 @@ class ExportService {
         'endMs': clip.trimEndMs,
         'rotation': clip.rotation,
         'speed': clip.speed,
+        // Fondu de transition : entrée de ce clip, sortie vers le suivant.
+        'fadeInMs': clip.transitionInMs,
+        'fadeOutMs': i + 1 < project.clips.length
+            ? project.clips[i + 1].transitionInMs
+            : 0,
+        'fadeInWhite': clip.transitionWhite,
+        'fadeOutWhite': i + 1 < project.clips.length
+            ? project.clips[i + 1].transitionWhite
+            : false,
+        'zoom': clip.zoomEffect,
         'volume': (clip.volume / 100).clamp(0.0, 1.0),
         'videoVolume': (project.videoVolume / 100).clamp(0.0, 1.0),
       });

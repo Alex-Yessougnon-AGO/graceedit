@@ -1494,7 +1494,48 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorSpeed => 'Speed';
 
   @override
+  String get editorTransition => 'Transition (fade)';
+
+  @override
+  String get transitionNone => 'None';
+
+  @override
+  String get transitionFadeBlack => 'Fade to black';
+
+  @override
+  String get transitionFadeWhite => 'Fade to white';
+
+  @override
+  String get editorZoomEffect => 'Zoom effect';
+
+  @override
+  String get zoomNone => 'None';
+
+  @override
+  String get zoomIn => 'Zoom in';
+
+  @override
+  String get zoomOut => 'Zoom out';
+
+  @override
   String get editorLockTrack => 'Lock track';
+
+  @override
+  String get trackLockedMessage =>
+      'Track locked — tap the track\'s lock to unlock it.';
+
+  @override
+  String get notifExportDoneTitle => 'Video ready';
+
+  @override
+  String get notifExportDoneBody => 'Your video has been saved to the gallery.';
+
+  @override
+  String get notifExportFailedTitle => 'Export did not finish';
+
+  @override
+  String get notifExportFailedBody =>
+      'Open GraceEdit to see what happened and try again.';
 
   @override
   String get editorUnlockTrack => 'Unlock track';

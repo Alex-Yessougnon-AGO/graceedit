@@ -140,6 +140,55 @@ void main() {
     });
   });
 
+  group('défilement des pistes et glisser du texte', () {
+    test('glisser sur la règle défile sans déplacer la tête', () async {
+      controller = await create();
+      controller.seek(2000);
+      controller.beginTimelineDrag(fromRuler: true);
+      controller.panOrScrubBy(3000);
+      controller.endTimelineDrag();
+      expect(controller.panMs, 3000);
+      expect(controller.positionMs, 2000);
+      // Le scrub recentre la vue sur la tête.
+      controller.beginTimelineDrag(fromRuler: false);
+      expect(controller.panMs, 0);
+      controller.endTimelineDrag();
+    });
+
+    test('le texte suit le doigt sans retard cumulé', () async {
+      controller = await create();
+      final item = controller.addText();
+      controller.beginGesture();
+      // Deux petits deltas doivent s'additionner exactement.
+      controller.moveTextOnPreview(item.id, 0.1, 0.05);
+      controller.moveTextOnPreview(item.id, 0.1, 0.05);
+      controller.endGesture();
+      final text = controller.project.texts.single;
+      expect(text.x, closeTo(item.x + 0.2, 0.001));
+      expect(text.y, closeTo(item.y + 0.1, 0.001));
+    });
+  });
+
+  group('effet zoom (phase 2)', () {
+    test('le choix de zoom est conservé tel quel', () async {
+      controller = await create();
+      controller.setClipZoomEffect('c1', 'in');
+      expect(controller.project.clips.single.zoomEffect, 'in');
+      controller.setClipZoomEffect('c1', 'none');
+      expect(controller.project.clips.single.zoomEffect, 'none');
+    });
+  });
+
+  group('transition fondu (phase 2)', () {
+    test('la durée de fondu est bornée et conservée', () async {
+      controller = await create();
+      controller.setClipTransition('c1', 5000);
+      expect(controller.project.clips.single.transitionInMs, 2000);
+      controller.setClipTransition('c1', 500);
+      expect(controller.project.clips.single.transitionInMs, 500);
+    });
+  });
+
   group('bornes de scission, vitesse et verrouillage', () {
     test(
       'étirer après scission ne fait pas revenir le morceau coupé',
@@ -172,7 +221,8 @@ void main() {
       controller.setTextsLocked(true);
       controller.moveText(item.id, 2000);
       expect(controller.project.texts.single.startMs, item.startMs);
-      controller.removeText(item.id);
+      // L'écran annonce « piste verrouillée » au lieu de « supprimé ».
+      expect(controller.removeText(item.id), isFalse);
       expect(controller.project.texts, hasLength(1));
       controller.setTextsLocked(false);
       controller.moveText(item.id, 2000);

@@ -372,6 +372,64 @@ class EditorController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ------------------------------------------------- glisser dans l'aperçu
+  //
+  // Comme pour la timeline, la position virtuelle (non reconstruite) est
+  // conservée pendant le geste : appliquer chaque delta à la dernière
+  // valeur reconstruite donnait un texte qui « traîne » derrière le doigt.
+  String? _previewDragId;
+  double _previewDragX = 0.5;
+  double _previewDragY = 0.5;
+
+  /// Déplace un texte dans l'aperçu par fractions de la taille d'aperçu.
+  void moveTextOnPreview(String id, double deltaX, double deltaY) {
+    if (_project.textsLocked) return;
+    final index = _project.texts.indexWhere((t) => t.id == id);
+    if (index < 0) return;
+    final text = _project.texts[index];
+    if (_previewDragId != id) {
+      _previewDragId = id;
+      _previewDragX = text.x;
+      _previewDragY = text.y;
+    }
+    _previewDragX = (_previewDragX + deltaX).clamp(0.05, 0.95);
+    _previewDragY = (_previewDragY + deltaY).clamp(0.05, 0.95);
+    final texts = [..._project.texts];
+    texts[index] = text.copyWith(x: _previewDragX, y: _previewDragY);
+    _apply(_project.copyWith(texts: texts));
+    selection = SelectionType.text;
+    selectedId = id;
+  }
+
+  // ------------------------------------------------------ panoramique vue
+  //
+  // Défilement horizontal des pistes sans déplacer la tête de lecture
+  // (glisser sur la règle) : indispensable pour atteindre la fin d'un
+  // clip quand on a zoomé. Le scrub (glisser sur les pistes) recentre.
+  int panMs = 0;
+  bool _rulerPan = false;
+
+  void beginTimelineDrag({required bool fromRuler}) {
+    _rulerPan = fromRuler;
+    if (!fromRuler) panMs = 0;
+  }
+
+  void endTimelineDrag() => _rulerPan = false;
+
+  void panOrScrubBy(int deltaMs) {
+    if (_rulerPan) {
+      final clamped = (panMs + deltaMs).clamp(
+        -_positionMs,
+        durationMs - _positionMs,
+      );
+      if (clamped == panMs) return;
+      panMs = clamped;
+      notifyListeners();
+    } else {
+      scrubBy(deltaMs);
+    }
+  }
+
   // ---------------------------------------------------------- aimantation
   //
   // Pendant un glissement, la position « virtuelle » (non aimantée) est
@@ -446,6 +504,7 @@ class EditorController extends ChangeNotifier {
 
   void endGesture() {
     _dragId = null;
+    _previewDragId = null;
     _lastSnapHit = null;
     if (_gestureBase == null) return;
     final before = _gestureBase!;
@@ -460,6 +519,7 @@ class EditorController extends ChangeNotifier {
   /// d'un panneau par la croix). Aucune entrée d'annulation n'est ajoutée.
   void cancelGesture() {
     _dragId = null;
+    _previewDragId = null;
     _lastSnapHit = null;
     final before = _gestureBase;
     if (before == null) return;
@@ -624,6 +684,35 @@ class EditorController extends ChangeNotifier {
     final index = clips.indexWhere((c) => c.id == id);
     if (index < 0) return;
     clips[index] = clips[index].copyWith(speed: speed.clamp(0.25, 4));
+    _apply(_project.copyWith(clips: clips));
+    selection = SelectionType.clip;
+    selectedId = id;
+    notifyListeners();
+  }
+
+  /// Transition « Fondu » à l'entrée de ce clip (0 = aucune) : le clip
+  /// apparaît depuis le noir et le précédent s'y éteint, en aperçu comme
+  /// à l'export.
+  void setClipTransition(String id, int transitionMs, {bool white = false}) {
+    final clips = [..._project.clips];
+    final index = clips.indexWhere((c) => c.id == id);
+    if (index < 0) return;
+    clips[index] = clips[index].copyWith(
+      transitionInMs: transitionMs.clamp(0, 2000),
+      transitionWhite: white,
+    );
+    _apply(_project.copyWith(clips: clips));
+    selection = SelectionType.clip;
+    selectedId = id;
+    notifyListeners();
+  }
+
+  /// Effet de zoom animé du clip : 'none', 'in' ou 'out'.
+  void setClipZoomEffect(String id, String effect) {
+    final clips = [..._project.clips];
+    final index = clips.indexWhere((c) => c.id == id);
+    if (index < 0) return;
+    clips[index] = clips[index].copyWith(zoomEffect: effect);
     _apply(_project.copyWith(clips: clips));
     selection = SelectionType.clip;
     selectedId = id;
@@ -826,18 +915,22 @@ class EditorController extends ChangeNotifier {
     selectedId = id;
   }
 
-  void removeText(String id) {
-    if (_project.textsLocked) return;
+  /// Renvoie false si la piste est verrouillée : l'écran doit alors le
+  /// dire, au lieu d'annoncer une suppression qui n'a pas eu lieu.
+  bool removeText(String id) {
+    if (_project.textsLocked) return false;
     _apply(
       _project.copyWith(
         texts: _project.texts.where((t) => t.id != id).toList(),
       ),
     );
     clearSelection();
+    return true;
   }
 
   /// EDT-03, barre « Plus » : dupliquer le texte sélectionné.
   void duplicateText(String id) {
+    if (_project.textsLocked) return;
     final index = _project.texts.indexWhere((t) => t.id == id);
     if (index < 0) return;
     final copy = _project.texts[index].copyWith(id: _uuid.v4());
@@ -965,6 +1058,7 @@ class EditorController extends ChangeNotifier {
 
   /// EDT-04, « Plus » : duplique l'élément audio juste après lui.
   void duplicateAudio(String id) {
+    if (_project.audiosLocked) return;
     final index = _project.audios.indexWhere((a) => a.id == id);
     if (index < 0) return;
     final source = _project.audios[index];
@@ -1004,14 +1098,15 @@ class EditorController extends ChangeNotifier {
     return item;
   }
 
-  void removeAudio(String id) {
-    if (_project.audiosLocked) return;
+  bool removeAudio(String id) {
+    if (_project.audiosLocked) return false;
     _apply(
       _project.copyWith(
         audios: _project.audios.where((a) => a.id != id).toList(),
       ),
     );
     clearSelection();
+    return true;
   }
 
   void replaceProject(Project project) {

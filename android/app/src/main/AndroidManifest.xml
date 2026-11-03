@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- Notifications locales de fin d'export (demandées avant le premier export, jamais bloquantes). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Pas de CAMERA ni de RECORD_AUDIO : caméra et voix off sont hors V1. -->
     <application
         android:label="GraceEdit"

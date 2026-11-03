@@ -205,6 +205,10 @@ class _ThumbImage extends StatefulWidget {
 class _ThumbImageState extends State<_ThumbImage> {
   Future<String?>? _future;
 
+  /// Dernière image chargée : elle reste affichée pendant le chargement
+  /// de la suivante (zoom, rognage), au lieu d'un trou noir.
+  String? _lastFile;
+
   @override
   void initState() {
     super.initState();
@@ -237,8 +241,12 @@ class _ThumbImageState extends State<_ThumbImage> {
       builder: (context, snapshot) {
         final file = snapshot.data;
         if (file != null && File(file).existsSync()) {
+          _lastFile = file;
+        }
+        final shown = _lastFile;
+        if (shown != null && File(shown).existsSync()) {
           return Image.file(
-            File(file),
+            File(shown),
             fit: BoxFit.cover,
             gaplessPlayback: true,
             errorBuilder: (context, _, _) =>
