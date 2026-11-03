@@ -240,6 +240,33 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
                     OverlayEffect(listOf(
                         SubtitleOverlay(localCues, subtitleStyle, width, height))))
             }
+            val fadeInMs = (c["fadeInMs"] as? Number)?.toLong() ?: 0L
+            val fadeOutMs = (c["fadeOutMs"] as? Number)?.toLong() ?: 0L
+            if (fadeInMs > 0 || fadeOutMs > 0) {
+                // Fondu depuis/vers le noir (ou le blanc), synchronisé
+                // avec le son.
+                videoEffects.add(
+                    OverlayEffect(listOf(
+                        FadeOverlay(
+                            clipDurationMs, fadeInMs, fadeOutMs,
+                            if (c["fadeInWhite"] == true) {
+                                Color.WHITE
+                            } else {
+                                Color.BLACK
+                            },
+                            if (c["fadeOutWhite"] == true) {
+                                Color.WHITE
+                            } else {
+                                Color.BLACK
+                            },
+                        ))))
+            }
+            when (c["zoom"] as? String) {
+                "in" -> videoEffects.add(
+                    ZoomTransformation(clipDurationMs, 1f, 1.15f))
+                "out" -> videoEffects.add(
+                    ZoomTransformation(clipDurationMs, 1.15f, 1f))
+            }
             val audioProcessors = mutableListOf<AudioProcessor>()
             if (speed != 1f) {
                 // Même effet de vitesse que l'aperçu (video_player).
@@ -250,9 +277,13 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
                     androidx.media3.effect.SpeedChangeEffect(speed))
             }
             val gain = clipVolume * videoVolume
-            if (gain < 0.999f) {
+            if (gain < 0.999f || fadeInMs > 0 || fadeOutMs > 0) {
                 audioProcessors.add(
-                    GainProcessor(RampGain(gain, 0L, 0L, clipDurationMs * 1000L)))
+                    RampGainProcessor(
+                        gain,
+                        fadeInMs * 1000L,
+                        fadeOutMs * 1000L,
+                        clipDurationMs * 1000L))
             }
             items.add(
                 EditedMediaItem.Builder(mediaItem)
@@ -287,12 +318,11 @@ class ExportPlugin(private val context: Context, engine: FlutterEngine) {
                         .build())
                 .build()
             val durationUs = (trimEndMs - trimStartMs) * 1000L
-            val gainProcessor = GainProcessor(
-                RampGain(
+            val gainProcessor = RampGainProcessor(
                     volume,
                     fadeInMs * 1000L,
                     fadeOutMs * 1000L,
-                    durationUs))
+                    durationUs)
             val musicEdited = EditedMediaItem.Builder(musicItem)
                 .setRemoveVideo(true)
                 .setEffects(Effects(listOf(gainProcessor), emptyList()))
@@ -461,28 +491,68 @@ private data class SubtitleCue(
 )
 
 /**
- * Gain constant, avec rampes linéaires d'entrée et de sortie. Le même calcul
- * que `PreviewAudioEngine.gainFor` côté Dart, pour que l'export sonne comme
+ * Gain constant avec rampes linéaires d'entrée et de sortie, appliqué
+ * directement sur les échantillons PCM 16 bits. Même courbe que
+ * `PreviewAudioEngine.gainFor` côté Dart, pour que l'export sonne comme
  * l'aperçu.
+ *
+ * Processeur maison plutôt que le `GainProcessor` de Media3 : avec un
+ * `GainProvider` à rampes, son `queueInput` bouclait sans consommer les
+ * tampons (export bloqué à 10 %, thread Transformer en boucle — constaté
+ * par dump de threads sur émulateur).
  */
-private class RampGain(
+private class RampGainProcessor(
     private val gain: Float,
     private val fadeInUs: Long,
     private val fadeOutUs: Long,
     private val durationUs: Long,
-) : GainProcessor.GainProvider {
+) : androidx.media3.common.audio.BaseAudioProcessor() {
 
-    override fun getGainFactorAtSamplePosition(
-        samplePosition: Long,
-        sampleRate: Int,
-    ): Float {
-        if (fadeInUs <= 0 && fadeOutUs <= 0) return gain.coerceIn(0f, 1f)
-        val positionUs = if (sampleRate > 0) {
-            samplePosition * 1_000_000L / sampleRate
-        } else {
-            0L
+    private var framesProcessed = 0L
+
+    override fun onConfigure(
+        inputAudioFormat: AudioProcessor.AudioFormat,
+    ): AudioProcessor.AudioFormat {
+        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
+            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
         }
+        return inputAudioFormat
+    }
+
+    override fun queueInput(inputBuffer: java.nio.ByteBuffer) {
+        val size = inputBuffer.remaining()
+        if (size == 0) return
+        val outputBuffer = replaceOutputBuffer(size)
+        val input = inputBuffer
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            .asShortBuffer()
+        val output = outputBuffer
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            .asShortBuffer()
+        val channels = inputAudioFormat.channelCount.coerceAtLeast(1)
+        val sampleRate = inputAudioFormat.sampleRate
+        var index = 0
+        while (input.hasRemaining()) {
+            val frame = framesProcessed + index / channels
+            val factor = factorAtFrame(frame, sampleRate)
+            val sample = input.get()
+            output.put(
+                (sample * factor)
+                    .toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                    .toShort(),
+            )
+            index++
+        }
+        framesProcessed += index / channels
+        inputBuffer.position(inputBuffer.limit())
+        outputBuffer.flip()
+    }
+
+    private fun factorAtFrame(frame: Long, sampleRate: Int): Float {
         var value = gain
+        if (sampleRate <= 0) return value.coerceIn(0f, 1f)
+        val positionUs = frame * 1_000_000L / sampleRate
         if (fadeInUs > 0 && positionUs < fadeInUs) {
             value *= (positionUs.toDouble() / fadeInUs).toFloat()
         }
@@ -497,8 +567,105 @@ private class RampGain(
         return value.coerceIn(0f, 1f)
     }
 
-    override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long =
-        if (fadeInUs <= 0L && fadeOutUs <= 0L) Long.MAX_VALUE else samplePosition
+    override fun onFlush() {
+        framesProcessed = 0
+    }
+
+    override fun onReset() {
+        framesProcessed = 0
+    }
+}
+
+/**
+ * Fondu depuis/vers le noir (transition « Fondu ») : un bitmap noir plein
+ * cadre dont l'alpha suit la courbe de fondu au temps de présentation.
+ * Même courbe que l'aperçu Flutter (_fadeOverlayFor) et que le gain audio.
+ */
+private class FadeOverlay(
+    private val durationMs: Long,
+    private val fadeInMs: Long,
+    private val fadeOutMs: Long,
+    private val colorIn: Int = Color.BLACK,
+    private val colorOut: Int = Color.BLACK,
+) : BitmapOverlay() {
+    // Bitmaps immuables par niveau d'alpha (32 pas) : muter un bitmap que
+    // le thread GL lit encore provoquait « Release timed out » à l'export.
+    private val cache = HashMap<Int, Bitmap>()
+
+    // L'échelle de l'overlay est relative à sa texture (64 px), pas au
+    // cadre : sans ce calcul, le fondu n'était qu'un petit carré central
+    // dans le fichier exporté (constaté par mesure d'image).
+    private var settings: OverlaySettings = StaticOverlaySettings.Builder()
+        .setScale(1f, 1f)
+        .setOverlayFrameAnchor(0f, 0f)
+        .setBackgroundFrameAnchor(0f, 0f)
+        .build()
+
+    override fun configure(inputSize: androidx.media3.common.util.Size) {
+        super.configure(inputSize)
+        settings = StaticOverlaySettings.Builder()
+            .setScale(inputSize.width / 64f, inputSize.height / 64f)
+            .setOverlayFrameAnchor(0f, 0f)
+            .setBackgroundFrameAnchor(0f, 0f)
+            .build()
+    }
+
+    override fun getBitmap(presentationTimeUs: Long): Bitmap {
+        val ms = presentationTimeUs / 1000
+        var alpha = 0f
+        var color = colorIn
+        if (fadeInMs > 0 && ms < fadeInMs) {
+            alpha = maxOf(alpha, 1f - ms.toFloat() / fadeInMs)
+        }
+        val remaining = durationMs - ms
+        if (fadeOutMs > 0 && remaining < fadeOutMs) {
+            val outAlpha =
+                1f - remaining.coerceAtLeast(0).toFloat() / fadeOutMs
+            if (outAlpha > alpha) {
+                alpha = outAlpha
+                color = colorOut
+            }
+        }
+        val level = (alpha * 32).toInt().coerceIn(0, 32)
+        val key = level * 2 + if (color == Color.WHITE) 1 else 0
+        return cache.getOrPut(key) {
+            Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888).apply {
+                eraseColor(
+                    Color.argb(
+                        (level * 255 / 32),
+                        Color.red(color),
+                        Color.green(color),
+                        Color.blue(color),
+                    ),
+                )
+            }
+        }
+    }
+
+    override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings =
+        settings
+}
+
+/**
+ * Zoom animé (Ken Burns) : échelle progressive du cadre sur la durée du
+ * clip, centrée. Même courbe que l'aperçu Flutter (Transform.scale).
+ */
+private class ZoomTransformation(
+    private val durationMs: Long,
+    private val fromScale: Float,
+    private val toScale: Float,
+) : androidx.media3.effect.MatrixTransformation {
+    override fun getMatrix(presentationTimeUs: Long): android.graphics.Matrix {
+        val fraction = if (durationMs <= 0) {
+            0f
+        } else {
+            (presentationTimeUs / 1000f / durationMs).coerceIn(0f, 1f)
+        }
+        val scale = fromScale + (toScale - fromScale) * fraction
+        return android.graphics.Matrix().apply {
+            setScale(scale, scale, 0.5f, 0.5f)
+        }
+    }
 }
 
 /**

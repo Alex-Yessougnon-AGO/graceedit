@@ -197,6 +197,9 @@ class Clip {
     this.mirrored = false,
     this.straighten = 0,
     this.speed = 1,
+    this.transitionInMs = 0,
+    this.transitionWhite = false,
+    this.zoomEffect = 'none',
     this.limitStartMs,
     this.limitEndMs,
   });
@@ -210,6 +213,17 @@ class Clip {
   /// Vitesse de lecture (Phase 2) : la durée sur la timeline est la durée
   /// du média divisée par la vitesse.
   final double speed;
+
+  /// Fondu d'entrée depuis le noir (Phase 2, transition « Fondu ») : le
+  /// clip précédent fond aussi vers le noir sur la même durée.
+  final int transitionInMs;
+
+  /// Fondu blanc au lieu de noir pour la transition.
+  final bool transitionWhite;
+
+  /// Effet de zoom animé (Ken Burns) : 'none', 'in' (zoom avant lent) ou
+  /// 'out' (zoom arrière lent), appliqué en aperçu et à l'export.
+  final String zoomEffect;
 
   /// Bornes dures créées par un scindage : au-delà, le contenu a été
   /// coupé (et éventuellement supprimé), étirer le clip ne doit jamais
@@ -236,6 +250,9 @@ class Clip {
     bool? mirrored,
     double? straighten,
     double? speed,
+    int? transitionInMs,
+    bool? transitionWhite,
+    String? zoomEffect,
     int? limitStartMs,
     int? limitEndMs,
   }) => Clip(
@@ -249,6 +266,9 @@ class Clip {
     mirrored: mirrored ?? this.mirrored,
     straighten: straighten ?? this.straighten,
     speed: speed ?? this.speed,
+    transitionInMs: transitionInMs ?? this.transitionInMs,
+    transitionWhite: transitionWhite ?? this.transitionWhite,
+    zoomEffect: zoomEffect ?? this.zoomEffect,
     limitStartMs: limitStartMs ?? this.limitStartMs,
     limitEndMs: limitEndMs ?? this.limitEndMs,
   );
@@ -260,6 +280,9 @@ class Clip {
     'trimEndMs': trimEndMs,
     'volume': volume,
     'speed': speed,
+    'transitionInMs': transitionInMs,
+    'transitionWhite': transitionWhite,
+    'zoomEffect': zoomEffect,
     'limitStartMs': limitStartMs,
     'limitEndMs': limitEndMs,
     'adjustments': adjustments.toJson(),
@@ -275,6 +298,9 @@ class Clip {
     trimEndMs: (json['trimEndMs'] as num?)?.toInt() ?? 0,
     volume: (json['volume'] as num?)?.toDouble() ?? 100,
     speed: (json['speed'] as num?)?.toDouble() ?? 1,
+    transitionInMs: (json['transitionInMs'] as num?)?.toInt() ?? 0,
+    transitionWhite: json['transitionWhite'] == true,
+    zoomEffect: json['zoomEffect'] as String? ?? 'none',
     limitStartMs: (json['limitStartMs'] as num?)?.toInt(),
     limitEndMs: (json['limitEndMs'] as num?)?.toInt(),
     adjustments: Adjustments.fromJson(

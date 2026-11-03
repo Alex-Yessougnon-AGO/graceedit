@@ -126,6 +126,9 @@ class EditorPreview extends StatelessWidget {
                   ),
                 ),
               ),
+            // Fondu de transition (Phase 2) : voile noir dont l'opacité
+            // suit la position dans le clip, en entrée comme en sortie.
+            if (!missing) _fadeOverlayFor(controller, project, clip),
             if (controller.panel == EditorPanel.adjust &&
                 controller.compareOriginal)
               Positioned(
@@ -157,6 +160,44 @@ class EditorPreview extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Voile du fondu de transition à la position courante : noir total aux
+/// bornes concernées, transparent au milieu du clip.
+Widget _fadeOverlayFor(
+  EditorController controller,
+  Project project,
+  Clip clip,
+) {
+  final local = controller.positionMs - controller.clipStartMs(clip);
+  var alpha = 0.0;
+  var white = false;
+  final fadeIn = clip.transitionInMs;
+  if (fadeIn > 0 && local < fadeIn) {
+    alpha = 1 - local / fadeIn;
+    white = clip.transitionWhite;
+  }
+  final index = project.clips.indexWhere((c) => c.id == clip.id);
+  if (index >= 0 && index + 1 < project.clips.length) {
+    final next = project.clips[index + 1];
+    final fadeOut = next.transitionInMs;
+    final remaining = clip.durationMs - local;
+    if (fadeOut > 0 && remaining < fadeOut) {
+      final outAlpha = 1 - remaining / fadeOut;
+      if (outAlpha > alpha) {
+        alpha = outAlpha;
+        white = next.transitionWhite;
+      }
+    }
+  }
+  if (alpha <= 0.01) return const SizedBox.shrink();
+  return IgnorePointer(
+    child: ColoredBox(
+      color: (white ? Colors.white : Colors.black).withValues(
+        alpha: alpha.clamp(0.0, 1.0),
+      ),
+    ),
+  );
 }
 
 class _CompareButton extends StatelessWidget {
@@ -491,6 +532,21 @@ class _MediaPreviewState extends State<_MediaPreview> {
         showDuration: false,
         fit: BoxFit.cover,
       );
+    }
+
+    // Effet de zoom animé (Ken Burns) : échelle progressive sur la durée
+    // du clip, identique en aperçu et à l'export (MatrixTransformation).
+    final zoomEffect = widget.clip.zoomEffect;
+    if (zoomEffect == 'in' || zoomEffect == 'out') {
+      final mediaDuration = widget.clip.trimEndMs - widget.clip.trimStartMs;
+      final fraction = mediaDuration <= 0
+          ? 0.0
+          : ((widget.positionInClip - widget.clip.trimStartMs) / mediaDuration)
+                .clamp(0.0, 1.0);
+      final scale = zoomEffect == 'in'
+          ? 1 + 0.15 * fraction
+          : 1.15 - 0.15 * fraction;
+      content = Transform.scale(scale: scale, child: content);
     }
 
     final adjustments = widget.compareOriginal

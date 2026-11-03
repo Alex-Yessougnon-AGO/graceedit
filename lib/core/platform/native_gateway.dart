@@ -170,6 +170,16 @@ class NativeGateway {
   Future<bool> notificationsAllowed() async =>
       await _system.invokeMethod<bool>('notificationsAllowed') ?? false;
 
+  /// Notification locale de fin d'export (aucun envoi réseau ; ignorée
+  /// par le natif si l'utilisateur n'a pas autorisé les notifications).
+  Future<void> showNotification({
+    required String title,
+    required String body,
+  }) => _system.invokeMethod<void>('showNotification', {
+    'title': title,
+    'body': body,
+  });
+
   Future<bool> requestNotifications() async =>
       await _system.invokeMethod<bool>('requestNotifications') ?? false;
 

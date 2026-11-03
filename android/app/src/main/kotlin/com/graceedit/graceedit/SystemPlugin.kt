@@ -39,6 +39,16 @@ class SystemPlugin(
         MethodChannel(engine.dartExecutor.binaryMessenger, "graceedit/system")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "showNotification" -> {
+                        val title = call.argument<String>("title") ?: ""
+                        val body = call.argument<String>("body") ?: ""
+                        try {
+                            showNotification(title, body)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("NOTIFY_FAILED", e.message, null)
+                        }
+                    }
                     "storage" -> result.success(storageInfo())
                     "capabilities" -> result.success(capabilities())
                     "notificationsAllowed" -> result.success(notificationsAllowed())
@@ -123,6 +133,56 @@ class SystemPlugin(
 
     private fun notificationsAllowed(): Boolean =
         NotificationManagerCompat.from(activity).areNotificationsEnabled()
+
+    /**
+     * Notification locale (aucun réseau) : fin d'export, succès ou échec.
+     * Le tap rouvre l'application. Rien n'est envoyé si l'utilisateur n'a
+     * pas autorisé les notifications.
+     */
+    private fun showNotification(title: String, body: String) {
+        val manager = NotificationManagerCompat.from(activity)
+        if (!manager.areNotificationsEnabled()) return
+        val channelId = "graceedit_exports"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                channelId,
+                "Exports",
+                android.app.NotificationManager.IMPORTANCE_DEFAULT,
+            )
+            val system = activity.getSystemService(
+                android.content.Context.NOTIFICATION_SERVICE,
+            ) as android.app.NotificationManager
+            system.createNotificationChannel(channel)
+        }
+        val launch = activity.packageManager
+            .getLaunchIntentForPackage(activity.packageName)
+        val pending = if (launch != null) {
+            android.app.PendingIntent.getActivity(
+                activity,
+                0,
+                launch,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                    android.app.PendingIntent.FLAG_IMMUTABLE,
+            )
+        } else {
+            null
+        }
+        val notification = androidx.core.app.NotificationCompat.Builder(
+            activity,
+            channelId,
+        )
+            .setSmallIcon(R.drawable.ic_stat_graceedit)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .build()
+        try {
+            manager.notify(1001, notification)
+        } catch (_: SecurityException) {
+            // Permission retirée entre le contrôle et l'envoi : on ignore.
+        }
+    }
 
     private fun requestNotifications(result: MethodChannel.Result) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {

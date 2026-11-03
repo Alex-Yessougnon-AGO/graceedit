@@ -1509,7 +1509,49 @@ class AppLocalizationsFr extends AppLocalizations {
   String get editorSpeed => 'Vitesse';
 
   @override
+  String get editorTransition => 'Transition (fondu)';
+
+  @override
+  String get transitionNone => 'Aucune';
+
+  @override
+  String get transitionFadeBlack => 'Fondu noir';
+
+  @override
+  String get transitionFadeWhite => 'Fondu blanc';
+
+  @override
+  String get editorZoomEffect => 'Effet zoom';
+
+  @override
+  String get zoomNone => 'Aucun';
+
+  @override
+  String get zoomIn => 'Zoom avant';
+
+  @override
+  String get zoomOut => 'Zoom arrière';
+
+  @override
   String get editorLockTrack => 'Verrouiller la piste';
+
+  @override
+  String get trackLockedMessage =>
+      'Piste verrouillée — touchez le cadenas de la piste pour la déverrouiller.';
+
+  @override
+  String get notifExportDoneTitle => 'Vidéo prête';
+
+  @override
+  String get notifExportDoneBody =>
+      'Votre vidéo est enregistrée dans la galerie.';
+
+  @override
+  String get notifExportFailedTitle => 'Export non terminé';
+
+  @override
+  String get notifExportFailedBody =>
+      'Ouvrez GraceEdit pour voir ce qui s’est passé et réessayer.';
 
   @override
   String get editorUnlockTrack => 'Déverrouiller la piste';

@@ -676,6 +676,16 @@ class _ExportProgressScreenState extends ConsumerState<ExportProgressScreen> {
     _timer?.cancel();
     ref.read(activeExportProvider.notifier).state = null;
     if (!mounted) return;
+    final l10n = AppLocalizations.of(context);
+    unawaited(
+      ref
+          .read(nativeGatewayProvider)
+          .showNotification(
+            title: l10n.notifExportFailedTitle,
+            body: l10n.notifExportFailedBody,
+          )
+          .catchError((_) {}),
+    );
     context.pushReplacement('/export/${widget.projectId}/error?cause=$code');
   }
 
@@ -785,6 +795,18 @@ class _ExportProgressScreenState extends ConsumerState<ExportProgressScreen> {
       }
       ref.read(activeExportProvider.notifier).state = null;
       if (!mounted) return;
+      // Notification système « vidéo prête » (si autorisée) : utile
+      // surtout quand l'export a continué en arrière-plan.
+      final l10n = AppLocalizations.of(context);
+      unawaited(
+        ref
+            .read(nativeGatewayProvider)
+            .showNotification(
+              title: l10n.notifExportDoneTitle,
+              body: l10n.notifExportDoneBody,
+            )
+            .catchError((_) {}),
+      );
       context.pushReplacement('/export/${project.id}/result');
     } on ExportException catch (e) {
       _fail(e.code);
